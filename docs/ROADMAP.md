@@ -60,13 +60,22 @@ in `docs/parity/` (~884 catalogued commands).
 
 - [x] 95 lexers, per-language completion data with call-tip signatures
 
+**Distribution**
+- [x] Developer ID signed DMG produced by `./scripts/release.sh`, with the
+      hardened runtime and a secure timestamp. `spctl` reports
+      "Unnotarized Developer ID" — the signature is recognised.
+- [ ] Notarization — **deliberately not done.** The app is signed and
+      installable; notarizing additionally removes Gatekeeper's first-launch
+      warning on other Macs. Jaber declined to notarize under the App Store
+      Connect key on this machine, which belongs to another project. Run
+      `NOTARY_PROFILE=<profile> ./scripts/release.sh` (or supply
+      `NOTARY_APPLE_ID`/`NOTARY_PASSWORD`/`NOTARY_TEAM_ID`) to complete it.
+
 ## Remaining
 
-**Distribution**
-- [ ] Notarized DMG — **blocked**: needs a Developer ID Application
-      certificate plus `NOTARY_APPLE_ID`/`NOTARY_PASSWORD`/`NOTARY_TEAM_ID`
-      or an App Store Connect API key. `scripts/release.sh` refuses to run
-      without them rather than emitting a build Gatekeeper would reject.
+Nothing outstanding in the parity matrices. Future work is depth rather than
+coverage: more languages, richer completion data, a native XPC plugin tier,
+and chunked storage for multi-GB files.
 
 ## Open decisions
 
