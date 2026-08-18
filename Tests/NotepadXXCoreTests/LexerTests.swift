@@ -169,3 +169,76 @@ final class LanguageRegistryTests: XCTestCase {
         XCTAssertEqual(names, names.sorted())
     }
 }
+
+final class ExtendedLanguageTests: XCTestCase {
+    private let registry = LanguageRegistry()
+
+    private func tokens(_ text: String, _ language: LanguageDefinition) -> [(TokenType, String)] {
+        let content = text as NSString
+        return Lexer(language: language).tokenize(text).tokens.map {
+            ($0.type, content.substring(with: $0.range))
+        }
+    }
+
+    func testShippedLanguageCount() {
+        XCTAssertGreaterThanOrEqual(registry.all.count, 70,
+                                    "the shipped set should cover most of Notepad++'s lexers")
+    }
+
+    func testNoDuplicateLanguageNames() {
+        let names = registry.all.map { $0.name.lowercased() }
+        XCTAssertEqual(Set(names).count, names.count, "language names must be unique")
+    }
+
+    /// A file extension claimed by two languages would make detection depend on
+    /// declaration order.
+    func testNoDuplicateFileExtensions() {
+        var seen: [String: String] = [:]
+        var clashes: [String] = []
+        for language in registry.all {
+            for ext in language.fileExtensions {
+                if let owner = seen[ext] { clashes.append("\(ext): \(owner) vs \(language.name)") }
+                seen[ext] = language.name
+            }
+        }
+        XCTAssertTrue(clashes.isEmpty, "extensions claimed twice: \(clashes)")
+    }
+
+    func testEveryLanguageHasANameAndLexes() {
+        for language in registry.all {
+            XCTAssertFalse(language.name.isEmpty)
+            // Every definition must survive lexing a representative snippet.
+            XCTAssertNoThrow(Lexer(language: language).tokenize("a = 1 // x\n\"s\"\n"))
+        }
+    }
+
+    func testPowerShellIsCaseInsensitive() {
+        XCTAssertTrue(tokens("FUNCTION Test {}", BuiltInLanguages.powershell)
+            .contains { $0.0 == .keyword1 })
+    }
+
+    func testHaskellNestsBlockComments() {
+        let result = tokens("{- outer {- inner -} still -} data", BuiltInLanguages.haskell)
+        XCTAssertTrue(result.contains { $0 == (.keyword1, "data") },
+                      "nested comment closes at the outer terminator")
+    }
+
+    func testMakefileAndDockerfileMatchByWholeName() {
+        XCTAssertEqual(registry.detect(fileName: "Makefile")?.name, "Makefile")
+        XCTAssertEqual(registry.detect(fileName: "Dockerfile")?.name, "Dockerfile")
+    }
+
+    func testLogLevelsAreDistinctKeywordGroups() {
+        let result = tokens("ERROR WARN INFO", BuiltInLanguages.log)
+        XCTAssertTrue(result.contains { $0 == (.keyword1, "ERROR") })
+        XCTAssertTrue(result.contains { $0 == (.keyword2, "WARN") })
+        XCTAssertTrue(result.contains { $0 == (.keyword3, "INFO") })
+    }
+
+    func testAssemblyCommentsAndRegisters() {
+        let result = tokens("mov eax, 1 ; load", BuiltInLanguages.assembly)
+        XCTAssertTrue(result.contains { $0 == (.keyword1, "mov") })
+        XCTAssertTrue(result.contains { $0 == (.keyword2, "eax") })
+        XCTAssertTrue(result.contains { $0.0 == .commentLine })
+    }
+}

@@ -65,7 +65,7 @@ public enum BuiltInLanguages {
     public static let all: [LanguageDefinition] = [
         c, cpp, csharp, java, javascript, typescript, swift, python, ruby, php,
         go, rust, shell, sql, html, xml, css, json, yaml, markdown, ini, batch, lua, perl,
-    ]
+    ] + additional
 
     private static let cFamilyOperators = "+-*/%=<>!&|^~?:;,.()[]{}"
 
@@ -311,7 +311,7 @@ public enum BuiltInLanguages {
     )
 
     public static let ini = LanguageDefinition(
-        name: "INI", fileExtensions: ["ini", "cfg", "conf", "toml"],
+        name: "INI", fileExtensions: ["ini", "cfg", "conf"],
         lineCommentTokens: [";", "#"], stringDelimiters: ["\"", "'"],
         operatorCharacters: "=[]",
         foldOpen: [], foldClose: []
