@@ -173,7 +173,11 @@ public enum MainMenu {
     @MainActor
     private static func languageMenu() -> NSMenuItem {
         let item = NSMenuItem(title: "Language", action: nil, keyEquivalent: "")
-        item.submenu = MainWindowController.buildLanguageMenu()
+        let menu = MainWindowController.buildLanguageMenu()
+        menu.addItem(.separator())
+        add(menu, "Import User Defined Language…", #selector(MainWindowController.importUDLAction(_:)))
+        add(menu, "Export Current Language…", #selector(MainWindowController.exportUDLAction(_:)))
+        item.submenu = menu
         return item
     }
 

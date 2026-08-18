@@ -46,3 +46,56 @@ extension MainWindowController {
         document.languageName = detected?.name
     }
 }
+
+/// User Defined Language import/export, using the real Notepad++ XML format so
+/// the existing community UDL collection loads without conversion.
+extension MainWindowController {
+    @objc public func importUDLAction(_ sender: Any?) {
+        let picker = NSOpenPanel()
+        picker.allowedContentTypes = [.xml]
+        picker.allowsMultipleSelection = true
+        guard picker.runModal() == .OK else { return }
+
+        var imported = 0
+        var failures: [String] = []
+        for url in picker.urls {
+            do {
+                for language in try UDLSerialization.importLanguages(from: url) {
+                    LanguageRegistry.shared.register(language)
+                    imported += 1
+                }
+            } catch {
+                failures.append(url.lastPathComponent)
+            }
+        }
+        rebuildLanguageMenu()
+
+        let alert = NSAlert()
+        alert.messageText = imported > 0
+            ? "Imported \(imported) language\(imported == 1 ? "" : "s")"
+            : "Nothing imported"
+        if !failures.isEmpty {
+            alert.informativeText = "Could not read: " + failures.joined(separator: ", ")
+        }
+        alert.runModal()
+    }
+
+    @objc public func exportUDLAction(_ sender: Any?) {
+        guard documents.indices.contains(activeIndex),
+              let name = documents[activeIndex].languageName,
+              let language = LanguageRegistry.shared.language(named: name) else {
+            NSSound.beep()
+            return
+        }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(language.name).xml"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        try? UDLSerialization.exportXML(for: [language]).write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    /// Rebuilds the Language menu in place after the registry changes.
+    func rebuildLanguageMenu() {
+        guard let languageItem = NSApp.mainMenu?.items.first(where: { $0.title == "Language" }) else { return }
+        languageItem.submenu = MainWindowController.buildLanguageMenu()
+    }
+}
