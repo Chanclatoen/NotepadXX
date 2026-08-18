@@ -31,7 +31,17 @@ extension MainWindowController {
             self?.currentEditor?.replaceSelection(with: text)
         }
 
-        for panel in [functionList, workspace, clipboard, characters] as [DockablePanel] {
+        let documentMap = DocumentMapPanel()
+        documentMap.contentProvider = { [weak self] in
+            guard let self, let editor = self.currentEditor, let document = self.activeDocument else { return nil }
+            return (document.text, editor.visibleLineRange())
+        }
+        documentMap.onJumpToLine = { [weak self] line in
+            self?.currentEditor?.goToLine(line + 1)
+        }
+        self.documentMapPanel = documentMap
+
+        for panel in [functionList, workspace, clipboard, characters, documentMap] as [DockablePanel] {
             host.register(panel)
         }
         self.functionListPanel = functionList
@@ -39,6 +49,7 @@ extension MainWindowController {
     }
 
     @objc public func toggleFunctionListAction(_ sender: Any?) { dockHost?.toggle("functionList") }
+    @objc public func toggleDocumentMapAction(_ sender: Any?) { dockHost?.toggle("documentMap") }
     @objc public func toggleClipboardHistoryAction(_ sender: Any?) { dockHost?.toggle("clipboardHistory") }
     @objc public func toggleCharacterPanelAction(_ sender: Any?) { dockHost?.toggle("characterPanel") }
 
@@ -55,6 +66,7 @@ extension MainWindowController {
     /// Refreshes panels that depend on the active document.
     func refreshPanels() {
         functionListPanel?.reload()
+        documentMapPanel?.reload()
         dockHost?.refreshVisiblePanels()
     }
 }

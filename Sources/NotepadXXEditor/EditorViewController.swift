@@ -30,6 +30,14 @@ public final class EditorViewController: NSViewController {
     public private(set) var language: LanguageDefinition?
     private var baseFont: NSFont = .monospacedSystemFont(ofSize: 12, weight: .regular)
 
+    /// Whitespace / tab / EOL rendering.
+    public let invisibles = InvisibleCharacterRenderer()
+    /// Highlights every other occurrence of the word under the caret.
+    public var smartHighlightEnabled = true
+    /// Highlights the bracket partnering the one at the caret.
+    public var braceMatchingEnabled = true
+    public var showsCurrentLineHighlight = true
+
     public init(wrapLines: Bool = false) {
         self.wrapLines = wrapLines
         super.init(nibName: nil, bundle: nil)
@@ -53,6 +61,8 @@ public final class EditorViewController: NSViewController {
         // The gutter is a sibling pinned to the left of the scroll view rather
         // than an NSRulerView: the ruler machinery assumes an NSTextView-shaped
         // client and stops CodeEditTextView from drawing.
+        textView.layoutManager.invisibleCharacterDelegate = invisibles
+
         gutterView = GutterView()
         gutterView.textView = textView
 
@@ -172,6 +182,88 @@ public final class EditorViewController: NSViewController {
     public var selectedRange: NSRange {
         get { textView.selectionManager.textSelections.first?.range ?? NSRange(location: 0, length: 0) }
         set { textView.selectionManager.setSelectedRange(newValue) }
+    }
+
+    /// Applies View > Show Symbol options and repaints.
+    public func setInvisibles(spaces: Bool, tabs: Bool, lineEndings: Bool) {
+        invisibles.showSpaces = spaces
+        invisibles.showTabs = tabs
+        invisibles.showLineEndings = lineEndings
+        invisibles.optionsChanged()
+        // The engine caches per-character styles; force a re-layout so the
+        // change is visible immediately rather than on the next edit.
+        textView.layoutManager.invalidateLayoutForRect(textView.visibleRect)
+        textView.needsDisplay = true
+    }
+
+    /// Zoom, as Notepad++'s View > Zoom In/Out/Restore.
+    public func setFontSize(_ size: CGFloat) {
+        let clamped = min(max(6, size), 96)
+        baseFont = NSFont.monospacedSystemFont(ofSize: clamped, weight: .regular)
+        invisibles.font = baseFont
+        textView.font = baseFont
+        highlightVisibleRegion()
+        gutterView?.needsDisplay = true
+    }
+
+    public var fontSize: CGFloat { baseFont.pointSize }
+
+    /// The 0-based line range currently on screen, for the Document Map.
+    public func visibleLineRange() -> ClosedRange<Int> {
+        guard let highlighter else { return 0...0 }
+        let visible = scrollView.documentVisibleRect
+        let length = (textView.string as NSString).length
+        let start = textView.layoutManager.textOffsetAtPoint(CGPoint(x: 0, y: max(0, visible.minY))) ?? 0
+        let end = textView.layoutManager.textOffsetAtPoint(CGPoint(x: 0, y: visible.maxY)) ?? length
+        let first = highlighter.line(containing: min(start, length))
+        let last = highlighter.line(containing: min(max(end, start), length))
+        return first...max(first, last)
+    }
+
+    /// Emphasises the bracket matching the one at the caret, and every other
+    /// occurrence of the word under the caret.
+    func updateContextualEmphasis() {
+        guard let manager = textView.emphasisManager else { return }
+        manager.removeEmphases(for: "braceMatch")
+        manager.removeEmphases(for: "smartHighlight")
+
+        let content = textView.string as NSString
+        let caret = selectedRange
+
+        if braceMatchingEnabled, caret.length == 0 {
+            // Check the character on either side of the caret, as editors do.
+            for probe in [caret.location, caret.location - 1] where probe >= 0 && probe < content.length {
+                if let partner = BraceMatching.match(in: textView.string, at: probe, language: language) {
+                    manager.addEmphases([
+                        Emphasis(range: NSRange(location: probe, length: 1), style: .outline(color: .systemTeal)),
+                        Emphasis(range: NSRange(location: partner, length: 1), style: .outline(color: .systemTeal)),
+                    ], for: "braceMatch")
+                    break
+                }
+            }
+        }
+
+        if smartHighlightEnabled {
+            let word = caret.length > 0
+                ? content.substring(with: caret)
+                : AutoCompletion.currentPrefix(in: textView.string, at: caret.location)
+            let trimmed = word.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Only highlight real identifiers, and never the whole document.
+            if trimmed.count >= 2, trimmed.count <= 80,
+               trimmed.rangeOfCharacter(from: .whitespacesAndNewlines) == nil {
+                var emphases: [Emphasis] = []
+                var searchRange = NSRange(location: 0, length: content.length)
+                while searchRange.length > 0 {
+                    let found = content.range(of: trimmed, options: [], range: searchRange)
+                    guard found.location != NSNotFound else { break }
+                    if found != caret { emphases.append(Emphasis(range: found, style: .standard, inactive: true)) }
+                    let next = NSMaxRange(found)
+                    searchRange = NSRange(location: next, length: max(0, content.length - next))
+                    if emphases.count > 500 { break }   // guard on huge documents
+                }
+                if !emphases.isEmpty { manager.addEmphases(emphases, for: "smartHighlight") }
+            }
+        }
     }
 
     public func setWrapLines(_ wrap: Bool) {
@@ -301,6 +393,7 @@ extension EditorViewController: @preconcurrency TextViewDelegate {
         if let highlighter {
             gutterView?.currentLine = highlighter.line(containing: selectedRange.location)
         }
+        updateContextualEmphasis()
         onSelectionChange?(selectedRange)
     }
 }

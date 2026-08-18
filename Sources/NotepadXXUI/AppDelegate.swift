@@ -45,6 +45,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             windowController.newDocument()
         }
 
+        // Demo mode drives the new display options for screenshot verification.
+        if ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "1" {
+            windowController.showSpaces = true
+            windowController.showTabs = true
+            windowController.showLineEndings = true
+            windowController.applyInvisibles()
+            windowController.dockHost?.show("documentMap")
+            windowController.dockHost?.show("functionList")
+            windowController.toggleBookmarkAction(nil)
+        }
+
         windowController.showWindow(nil)
 
         // --screenshot <path> renders the window and exits, for CI and for

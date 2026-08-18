@@ -17,8 +17,8 @@ public final class MainWindowController: NSWindowController {
     public var documents: [TextDocument] { tabs.map(\.document) }
     public private(set) var activeIndex: Int = 0
 
-    private var tabBar: TabBarView!
-    private var statusBar: StatusBarView!
+    var tabBar: TabBarView!
+    var statusBar: StatusBarView!
     private var editorContainer: NSView!
     private var editors: [UUID: EditorViewController] = [:]
     private var untitledCounter = 0
@@ -27,12 +27,24 @@ public final class MainWindowController: NSWindowController {
     var installedFindPanel: FindPanelController?
     var installedResultsPanel: SearchResultsPanelController?
     var installedColumnEditor: ColumnEditorPanel?
+    // View-menu display state, applied to every editor so it behaves like a
+    // preference rather than a per-tab quirk.
+    var showSpaces = false
+    var showTabs = false
+    var showLineEndings = false
+    var editorFontSize: CGFloat = 12
+    var isDistractionFree = false
+    var hiddenPanelIdentifiers: [String] = []
+    /// Bookmarked lines, keyed by document id.
+    var bookmarks: [UUID: Bookmarks] = [:]
+
     var editorSplit: NSSplitView!
     var secondaryContainer: NSView!
     private var secondaryActiveIndex = 0
     var dockHost: DockHostView?
     var functionListPanel: FunctionListPanel?
     var folderWorkspacePanel: FolderWorkspacePanel?
+    var documentMapPanel: DocumentMapPanel?
     let macroRecorder = MacroRecorder()
     var lastRecordedSteps: [MacroStep] = []
     var macroStore: MacroStore?
@@ -271,6 +283,18 @@ public final class MainWindowController: NSWindowController {
     func appendClone(of document: TextDocument, inPane pane: Int) {
         tabs.append(EditorTab(document: document, pane: pane))
         refreshTabs()
+    }
+
+    /// Every editor that currently exists, including the second pane's.
+    var allEditors: [EditorViewController] { Array(editors.values) }
+
+    var activeDocument: TextDocument? {
+        tabs.indices.contains(activeIndex) ? tabs[activeIndex].document : nil
+    }
+
+    func visiblePanelIdentifiers() -> [String] {
+        ["functionList", "folderWorkspace", "clipboardHistory", "characterPanel", "documentMap"]
+            .filter { dockHost?.isVisible($0) == true }
     }
 
     /// Replaces the tab list wholesale, clamping the active index.

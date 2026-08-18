@@ -149,6 +149,30 @@ public enum MainMenu {
         submenu("View") { menu in
             add(menu, "Word Wrap", #selector(MainWindowController.toggleWordWrapAction(_:)))
             menu.addItem(.separator())
+
+            let symbols = NSMenuItem(title: "Show Symbol", action: nil, keyEquivalent: "")
+            let symbolMenu = NSMenu(title: "Show Symbol")
+            add(symbolMenu, "Show White Space", #selector(MainWindowController.toggleShowWhitespaceAction(_:)))
+            add(symbolMenu, "Show Tabs", #selector(MainWindowController.toggleShowTabsAction(_:)))
+            add(symbolMenu, "Show End of Line", #selector(MainWindowController.toggleShowEndOfLineAction(_:)))
+            add(symbolMenu, "Show All Characters", #selector(MainWindowController.toggleShowAllCharactersAction(_:)))
+            symbols.submenu = symbolMenu
+            menu.addItem(symbols)
+
+            let zoom = NSMenuItem(title: "Zoom", action: nil, keyEquivalent: "")
+            let zoomMenu = NSMenu(title: "Zoom")
+            add(zoomMenu, "Zoom In", #selector(MainWindowController.zoomInAction(_:)), "+")
+            add(zoomMenu, "Zoom Out", #selector(MainWindowController.zoomOutAction(_:)), "-")
+            add(zoomMenu, "Restore Default Zoom", #selector(MainWindowController.zoomRestoreAction(_:)), "0")
+            zoom.submenu = zoomMenu
+            menu.addItem(zoom)
+
+            menu.addItem(.separator())
+            add(menu, "Toggle Full Screen", #selector(MainWindowController.toggleFullScreenAction(_:)))
+            add(menu, "Distraction Free Mode", #selector(MainWindowController.toggleDistractionFreeAction(_:)))
+            add(menu, "Always on Top", #selector(MainWindowController.toggleAlwaysOnTopAction(_:)))
+            add(menu, "Document Map", #selector(MainWindowController.toggleDocumentMapAction(_:)))
+            menu.addItem(.separator())
             add(menu, "Toggle Split View", #selector(MainWindowController.toggleSplitViewAction(_:)))
             add(menu, "Move to Other View", #selector(MainWindowController.moveToOtherViewAction(_:)))
             add(menu, "Clone to Other View", #selector(MainWindowController.cloneToOtherViewAction(_:)))

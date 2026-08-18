@@ -51,16 +51,16 @@ public final class DockHostView: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     private func buildLayout() {
+        // Docks are added to the split only when they hold a panel. Merely
+        // hiding them leaves their divider in place, and the divider indices
+        // then no longer line up with what is on screen.
         innerSplit.isVertical = true
         innerSplit.dividerStyle = .thin
-        innerSplit.addArrangedSubview(leftContainer)
         innerSplit.addArrangedSubview(centerContainer)
-        innerSplit.addArrangedSubview(rightContainer)
 
         outerSplit.isVertical = false
         outerSplit.dividerStyle = .thin
         outerSplit.addArrangedSubview(innerSplit)
-        outerSplit.addArrangedSubview(bottomContainer)
 
         outerSplit.translatesAutoresizingMaskIntoConstraints = false
         addSubview(outerSplit)
@@ -120,12 +120,49 @@ public final class DockHostView: NSView {
         }
     }
 
-    /// A dock with no panels takes no space.
+    /// Default dock sizes. NSSplitView otherwise hands almost all the space to
+    /// a newly added subview, squeezing the editor down to a sliver.
+    private let sideDockWidth: CGFloat = 260
+    private let bottomDockHeight: CGFloat = 180
+
+    /// A dock with no panels is removed from the split entirely.
     private func updateContainerVisibility() {
-        for container in [leftContainer, rightContainer, bottomContainer] {
-            container.isHidden = container.isEmpty
-        }
+        syncDock(leftContainer, in: innerSplit, atIndex: 0)
+        syncDock(rightContainer, in: innerSplit, atIndex: innerSplit.arrangedSubviews.count)
+        syncDock(bottomContainer, in: outerSplit, atIndex: outerSplit.arrangedSubviews.count)
         for split in [innerSplit, outerSplit] { split.adjustSubviews() }
+        // Divider positions are only meaningful once the split has a size.
+        DispatchQueue.main.async { [weak self] in self?.applyDockSizes() }
+    }
+
+    private func syncDock(_ container: PanelStackView, in split: NSSplitView, atIndex index: Int) {
+        let attached = container.superview === split
+        if !container.isEmpty && !attached {
+            split.insertArrangedSubview(container, at: min(index, split.arrangedSubviews.count))
+        } else if container.isEmpty && attached {
+            split.removeArrangedSubview(container)
+            container.removeFromSuperview()
+        }
+    }
+
+    /// Pins each visible dock to its default size, leaving the rest to the editor.
+    private func applyDockSizes() {
+        let width = innerSplit.bounds.width
+        let height = outerSplit.bounds.height
+        guard width > 0, height > 0 else { return }
+
+        if bottomContainer.superview === outerSplit {
+            outerSplit.setPosition(height - bottomDockHeight, ofDividerAt: 0)
+        }
+        // Dividers are indexed left to right across the attached subviews.
+        var divider = 0
+        if leftContainer.superview === innerSplit {
+            innerSplit.setPosition(sideDockWidth, ofDividerAt: divider)
+            divider += 1
+        }
+        if rightContainer.superview === innerSplit {
+            innerSplit.setPosition(width - sideDockWidth, ofDividerAt: divider)
+        }
     }
 
     // MARK: - Persistence
