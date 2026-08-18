@@ -61,10 +61,30 @@ final class TabBarView: NSView {
         }
     }
 
+    private var lastConfiguration: (titles: [String], dirty: [Bool], selected: Int,
+                                    pinned: [Bool], colours: [NSColor?])?
+    private var chromeBackground: NSColor = .windowBackgroundColor
+    private var chromeSelected: NSColor = .controlBackgroundColor
+    private var chromeText: NSColor = .labelColor
+
+    func applyChrome(background: NSColor, selected: NSColor, text: NSColor) {
+        chromeBackground = background
+        chromeSelected = selected
+        chromeText = text
+        layer?.backgroundColor = background.cgColor
+        // Rebuild so existing tabs pick up the new colours.
+        if let last = lastConfiguration {
+            configure(titles: last.titles, dirtyFlags: last.dirty, selected: last.selected,
+                      pinned: last.pinned, colours: last.colours)
+        }
+        needsDisplay = true
+    }
+
     func configure(
         titles: [String], dirtyFlags: [Bool], selected: Int,
         pinned: [Bool] = [], colours: [NSColor?] = []
     ) {
+        lastConfiguration = (titles, dirtyFlags, selected, pinned, colours)
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         applyLayout()
         for (index, title) in titles.enumerated() {
@@ -73,7 +93,10 @@ final class TabBarView: NSView {
                 isDirty: dirtyFlags.indices.contains(index) && dirtyFlags[index],
                 isSelected: index == selected,
                 isPinned: pinned.indices.contains(index) && pinned[index],
-                colour: colours.indices.contains(index) ? colours[index] : nil
+                colour: colours.indices.contains(index) ? colours[index] : nil,
+                background: chromeBackground,
+                selectedBackground: chromeSelected,
+                textColour: chromeText
             )
             tab.onSelect = { [weak self] in self?.onSelect?(index) }
             tab.onClose = { [weak self] in self?.onClose?(index) }
@@ -101,14 +124,21 @@ private final class TabItemView: NSView {
     var onDragTo: ((NSPoint) -> Void)?
     private let isSelected: Bool
 
-    init(title: String, isDirty: Bool, isSelected: Bool, isPinned: Bool = false, colour: NSColor? = nil) {
+    init(title: String, isDirty: Bool, isSelected: Bool, isPinned: Bool = false, colour: NSColor? = nil,
+         background: NSColor = .windowBackgroundColor,
+         selectedBackground: NSColor = .controlBackgroundColor,
+         textColour: NSColor = .labelColor) {
         self.isSelected = isSelected
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = (colour ?? (isSelected ? NSColor.controlBackgroundColor : NSColor.windowBackgroundColor)).cgColor
+        layer?.backgroundColor = (colour ?? (isSelected ? selectedBackground : background)).cgColor
+        // The active tab is joined to the editor below it, as Notepad++'s is.
+        layer?.cornerRadius = 3
+        layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
 
         let prefix = (isPinned ? "\u{1F4CC} " : "") + (isDirty ? "\u{25CF} " : "")
         let label = NSTextField(labelWithString: prefix + title)
+        label.textColor = textColour
         label.font = .systemFont(ofSize: 11)
         label.lineBreakMode = .byTruncatingTail
 

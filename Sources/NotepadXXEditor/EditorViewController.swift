@@ -67,6 +67,14 @@ public final class EditorViewController: NSViewController {
     public var edgeColumn = 0 { didSet { edgeGuideView?.column = edgeColumn } }
     /// Cmd-click opens links, as in Notepad++'s clickable URLs.
     public var clickableURLs = true
+    /// Vertical guides at each indent level.
+    public var showIndentGuides = true {
+        didSet {
+            indentGuideView?.isHidden = !showIndentGuides
+            indentGuideView?.needsDisplay = true
+        }
+    }
+    private var indentGuideView: IndentGuideView?
     /// Lines changed since load/save, drawn in the gutter.
     public private(set) var changeHistory = ChangeHistory()
     private var edgeGuideView: EdgeGuideView?
@@ -115,12 +123,23 @@ public final class EditorViewController: NSViewController {
         edgeGuideView = guideView
         container.addSubview(guideView, positioned: .above, relativeTo: scrollView)
 
+        let indentView = IndentGuideView()
+        indentView.editor = self
+        indentView.translatesAutoresizingMaskIntoConstraints = false
+        indentGuideView = indentView
+        container.addSubview(indentView, positioned: .above, relativeTo: scrollView)
+
         gutterWidthConstraint = widthConstraint
         NSLayoutConstraint.activate([
             guideView.topAnchor.constraint(equalTo: scrollView.topAnchor),
             guideView.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor),
             guideView.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
             guideView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
+
+            indentView.topAnchor.constraint(equalTo: scrollView.topAnchor),
+            indentView.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor),
+            indentView.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
+            indentView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
 
             gutterView.topAnchor.constraint(equalTo: container.topAnchor),
             gutterView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
@@ -144,6 +163,7 @@ public final class EditorViewController: NSViewController {
 
     @objc private func viewportChanged() {
         gutterView?.needsDisplay = true
+        indentGuideView?.needsDisplay = true
         highlightVisibleRegion()
     }
 
@@ -166,6 +186,7 @@ public final class EditorViewController: NSViewController {
         textView.setText(text)
         highlighter?.setText(text)
         highlightVisibleRegion()
+        refreshFoldMarkers()
         updateGutterWidth()
     }
 
@@ -176,6 +197,7 @@ public final class EditorViewController: NSViewController {
             let highlighter = SyntaxHighlighter(language: language)
             highlighter.setText(textView.string)
             self.highlighter = highlighter
+            refreshFoldMarkers()
         } else {
             self.highlighter = nil
             clearHighlighting()
@@ -262,6 +284,23 @@ public final class EditorViewController: NSViewController {
     public var isEditable: Bool {
         get { textView.isEditable }
         set { textView.isEditable = newValue }
+    }
+
+    /// Recomputes fold regions for the gutter's fold boxes.
+    func refreshFoldMarkers() {
+        guard let language else {
+            gutterView?.foldStartLines = []
+            return
+        }
+        // Only worth computing for documents small enough that folding is
+        // useful; a million-line log does not need fold boxes.
+        let text = textView.string
+        guard (text as NSString).length < 2_000_000 else {
+            gutterView?.foldStartLines = []
+            return
+        }
+        let folds = FoldingEngine.folds(in: text, language: language)
+        gutterView?.foldStartLines = Set(folds.map(\.start))
     }
 
     /// Called after the document is written to disk: modified marks become
@@ -474,6 +513,7 @@ extension EditorViewController: @preconcurrency TextViewDelegate {
             gutterView?.savedChangedLines = changeHistory.savedLines
         }
         updateGutterWidth()
+        refreshFoldMarkers()
         onTextChange?(textView.string)
     }
 

@@ -20,6 +20,13 @@ public final class GutterView: NSView {
     public var bookmarkedLines: Set<Int> = [] { didSet { needsDisplay = true } }
     /// 0-based lines edited since the last save.
     public var changedLines: Set<Int> = [] { didSet { needsDisplay = true } }
+    /// Fold regions, so the margin can draw expand/collapse boxes.
+    public var foldStartLines: Set<Int> = [] { didSet { needsDisplay = true } }
+    public var collapsedFoldLines: Set<Int> = [] { didSet { needsDisplay = true } }
+    public var showFoldMargin = true { didSet { needsDisplay = true } }
+    /// Called when a fold box is clicked.
+    public var onToggleFold: ((Int) -> Void)?
+
     /// 0-based lines edited earlier this session and since saved.
     public var savedChangedLines: Set<Int> = [] { didSet { needsDisplay = true } }
     public var showChangeHistory = true { didSet { needsDisplay = true } }
@@ -27,6 +34,7 @@ public final class GutterView: NSView {
 
     private let horizontalPadding: CGFloat = 8
     private let markerWidth: CGFloat = 10
+    private let foldMarginWidth: CGFloat = 14
 
     public override var isFlipped: Bool { true }
 
@@ -44,7 +52,19 @@ public final class GutterView: NSView {
         let digits = max(2, String(max(1, textView.layoutManager.lineCount)).count)
         let sample = String(repeating: "0", count: digits)
         let width = (sample as NSString).size(withAttributes: [.font: font]).width
-        return width + horizontalPadding * 2 + markerWidth
+        return width + horizontalPadding * 2 + markerWidth + (showFoldMargin ? foldMarginWidth : 0)
+    }
+
+    /// Clicking a fold box toggles that region.
+    public override func mouseDown(with event: NSEvent) {
+        guard showFoldMargin, let textView, let layoutManager = textView.layoutManager,
+              let clipView = textView.enclosingScrollView?.contentView else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        guard point.x >= bounds.width - foldMarginWidth else { return }
+
+        let documentY = point.y + clipView.bounds.origin.y
+        guard let position = layoutManager.textLineForPosition(max(0, documentY)) else { return }
+        if foldStartLines.contains(position.index) { onToggleFold?(position.index) }
     }
 
     public override func draw(_ dirtyRect: NSRect) {
@@ -85,11 +105,39 @@ public final class GutterView: NSView {
                 attributes[.foregroundColor] = (index == currentLine) ? currentLineColor : textColor
                 let label = String(index + 1) as NSString
                 let size = label.size(withAttributes: attributes)
+                let numberRight = bounds.width - horizontalPadding - (showFoldMargin ? foldMarginWidth : 0)
                 label.draw(
-                    at: NSPoint(x: bounds.width - size.width - horizontalPadding,
-                                y: y + (height - size.height) / 2),
+                    at: NSPoint(x: numberRight - size.width, y: y + (height - size.height) / 2),
                     withAttributes: attributes
                 )
+            }
+
+            // Fold box: a square with a minus when open, a plus when collapsed,
+            // matching Notepad++'s default fold margin.
+            if showFoldMargin, foldStartLines.contains(index) {
+                let boxSize: CGFloat = 9
+                let box = NSRect(
+                    x: bounds.width - foldMarginWidth + (foldMarginWidth - boxSize) / 2,
+                    y: y + (height - boxSize) / 2,
+                    width: boxSize, height: boxSize
+                )
+                NSColor.textBackgroundColor.setFill()
+                box.fill()
+                textColor.setStroke()
+                NSBezierPath(rect: box.insetBy(dx: 0.5, dy: 0.5)).stroke()
+
+                let path = NSBezierPath()
+                let midY = box.midY
+                path.move(to: NSPoint(x: box.minX + 2, y: midY))
+                path.line(to: NSPoint(x: box.maxX - 2, y: midY))
+                if collapsedFoldLines.contains(index) {
+                    let midX = box.midX
+                    path.move(to: NSPoint(x: midX, y: box.minY + 2))
+                    path.line(to: NSPoint(x: midX, y: box.maxY - 2))
+                }
+                path.lineWidth = 1
+                textColor.setStroke()
+                path.stroke()
             }
 
             guard let next = layoutManager.textLineForIndex(index + 1) else { break }

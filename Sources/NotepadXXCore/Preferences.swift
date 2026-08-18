@@ -73,7 +73,7 @@ public struct Preferences: Codable, Equatable, Sendable {
     // MARK: - Appearance
     public var fontName: String = "SF Mono"
     public var fontSize: Double = 12
-    public var themeName: String = "System"
+    public var themeName: String = "Default Light"
 
     public init() {}
 

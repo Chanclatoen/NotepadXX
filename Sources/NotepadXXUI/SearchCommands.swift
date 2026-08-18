@@ -5,6 +5,18 @@ import NotepadXXEditor
 /// Search menu commands and the Find dialog wiring.
 extension MainWindowController {
 
+    /// Opens the panel already focused on Replace.
+    @objc public func showReplacePanelAction(_ sender: Any?) {
+        showFindPanelAction(sender)
+        findPanel().focusReplaceField()
+    }
+
+    /// Opens the panel already focused on Find in Files.
+    @objc public func showFindInFilesAction(_ sender: Any?) {
+        showFindPanelAction(sender)
+        findPanel().focusFindInFiles()
+    }
+
     @objc public func showFindPanelAction(_ sender: Any?) {
         let panel = findPanel()
         panel.showWindow(nil)

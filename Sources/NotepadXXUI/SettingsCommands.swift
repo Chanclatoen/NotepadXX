@@ -54,6 +54,18 @@ extension MainWindowController {
         }
         statusBar.isHidden = !preferences.showStatusBar
         tabBar.isHidden = !preferences.showTabBar
+        toolbar.isHidden = !preferences.showToolbar
+        applyChromeTheme(themeStore?.theme(named: preferences.themeName))
+    }
+
+    /// Themes the toolbar, tab bar and status bar to match the editor, so the
+    /// window reads as one surface rather than a light editor in dark chrome.
+    public func applyChromeTheme(_ theme: EditorTheme?) {
+        let chrome = AppearanceTheme.chrome(for: theme)
+        window?.appearance = chrome.appearance
+        toolbar.applyChrome(background: chrome.background)
+        tabBar.applyChrome(background: chrome.background, selected: chrome.selectedTab, text: chrome.text)
+        statusBar.applyChrome(background: chrome.background, text: chrome.text)
     }
 
     /// Re-applies key equivalents from the Shortcut Mapper onto the menu bar.

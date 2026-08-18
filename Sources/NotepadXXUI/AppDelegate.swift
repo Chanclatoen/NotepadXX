@@ -98,6 +98,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         windowController.rebuildSessionMenu()
         windowController.rebuildProjectMenu()
 
+        if ProcessInfo.processInfo.environment["NOTEPADXX_NO_GUIDES"] == "1" {
+            for editor in windowController.allEditors { editor.showIndentGuides = false }
+        }
+
         windowController.showWindow(nil)
 
         // --screenshot <path> renders the window and exits, for CI and for

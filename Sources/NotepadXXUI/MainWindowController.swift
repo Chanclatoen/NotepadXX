@@ -35,6 +35,9 @@ public final class MainWindowController: NSWindowController {
     var editorFontSize: CGFloat = 12
     var isDistractionFree = false
     var showChangeHistory = true
+    var showIndentGuides = true
+    var isOverwriteMode = false
+    var toolbar: ToolbarView!
     var tabBarHeightConstraint: NSLayoutConstraint?
     var hiddenPanelIdentifiers: [String] = []
     /// Bookmarked lines, keyed by document id.
@@ -99,6 +102,10 @@ public final class MainWindowController: NSWindowController {
         guard let window else { return }
         let content = NSView()
 
+        toolbar = ToolbarView()
+        toolbar.target = self
+        toolbar.configure(groups: ToolbarView.defaultGroups())
+
         tabBar = TabBarView()
         tabBar.onSelect = { [weak self] index in self?.activate(index: index) }
         tabBar.onClose = { [weak self] index in self?.close(index: index) }
@@ -131,7 +138,7 @@ public final class MainWindowController: NSWindowController {
         ])
         statusBar = StatusBarView()
 
-        for subview in [tabBar!, host as NSView, statusBar!] {
+        for subview in [toolbar!, tabBar!, host as NSView, statusBar!] {
             subview.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(subview)
         }
@@ -139,7 +146,12 @@ public final class MainWindowController: NSWindowController {
         let tabBarHeight = tabBar.heightAnchor.constraint(equalToConstant: 28)
         tabBarHeightConstraint = tabBarHeight
         NSLayoutConstraint.activate([
-            tabBar.topAnchor.constraint(equalTo: content.topAnchor),
+            toolbar.topAnchor.constraint(equalTo: content.topAnchor),
+            toolbar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            toolbar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            toolbar.heightAnchor.constraint(equalToConstant: 32),
+
+            tabBar.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
             tabBar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             tabBar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
             tabBarHeight,
@@ -306,15 +318,21 @@ public final class MainWindowController: NSWindowController {
         let controller = editorController(for: document)
         let caret = controller.caretPosition()
         let selection = controller.selectedRange
+        let selectedText = selection.length > 0
+            ? (document.text as NSString).substring(with: selection) : ""
         statusBar.update(
+            documentType: document.languageName ?? "Normal text file",
             length: (document.text as NSString).length,
             lines: document.text.isEmpty ? 1 : LineEnding.counts(in: document.text).lf + 1,
             selection: selection.length,
+            selectedLines: selectedText.isEmpty ? 0 : LineEnding.counts(in: selectedText).lf + 1,
             line: caret.line,
             column: caret.column,
             lineEnding: document.lineEnding.displayName,
-            encoding: document.encoding.displayName
+            encoding: document.encoding.displayName,
+            isOverwrite: isOverwriteMode
         )
+        refreshToolbarState()
     }
 
     /// Focuses an existing tab.

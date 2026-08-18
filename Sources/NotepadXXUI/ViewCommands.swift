@@ -21,6 +21,12 @@ extension MainWindowController {
         applyInvisibles()
     }
 
+    @objc public func toggleIndentGuideAction(_ sender: Any?) {
+        showIndentGuides.toggle()
+        for editor in allEditors { editor.showIndentGuides = showIndentGuides }
+        refreshToolbarState()
+    }
+
     @objc public func toggleShowAllCharactersAction(_ sender: Any?) {
         let turningOn = !(showSpaces && showTabs && showLineEndings)
         showSpaces = turningOn
@@ -35,6 +41,19 @@ extension MainWindowController {
         for editor in allEditors {
             editor.setInvisibles(spaces: showSpaces, tabs: showTabs, lineEndings: showLineEndings)
         }
+        refreshToolbarState()
+    }
+
+    /// Keeps the toolbar's pressed buttons in step with the actual state.
+    func refreshToolbarState() {
+        var active: Set<String> = []
+        if showSpaces && showTabs && showLineEndings { active.insert("Show All Characters") }
+        if showIndentGuides { active.insert("Indent Guide") }
+        if currentEditor?.textView.wrapLines == true { active.insert("Word Wrap") }
+        if dockHost?.isVisible("documentMap") == true { active.insert("Document Map") }
+        if dockHost?.isVisible("functionList") == true { active.insert("Function List") }
+        if macroRecorder.isRecording { active.insert("Start/Stop Recording") }
+        toolbar?.activeToggles = active
     }
 
     // MARK: - Zoom

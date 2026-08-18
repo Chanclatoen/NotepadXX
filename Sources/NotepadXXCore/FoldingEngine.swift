@@ -100,7 +100,7 @@ public enum FoldingEngine {
         return masked as String
     }
 
-    static func indentWidth(of line: String, tabWidth: Int = 4) -> Int {
+    public static func indentWidth(of line: String, tabWidth: Int = 4) -> Int {
         var width = 0
         for character in line {
             if character == " " { width += 1 }

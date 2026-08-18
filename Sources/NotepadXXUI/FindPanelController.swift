@@ -24,6 +24,16 @@ public final class FindPanelController: NSWindowController {
     public var onReplaceAll: ((Request) -> Void)?
     public var onFindAll: ((Request) -> Void)?
 
+    /// Focuses the Replace field, for the toolbar's Replace button.
+    public func focusReplaceField() {
+        window?.makeFirstResponder(replaceField)
+    }
+
+    /// Focuses the directory field so a Find in Files can be typed straight away.
+    public func focusFindInFiles() {
+        window?.makeFirstResponder(findField)
+    }
+
     private let findField = NSTextField(string: "")
     private let replaceField = NSTextField(string: "")
     private let modeControl = NSSegmentedControl(labels: ["Normal", "Extended", "Regular expression"],

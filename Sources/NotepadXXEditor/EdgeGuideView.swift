@@ -13,7 +13,9 @@ final class EdgeGuideView: NSView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        wantsLayer = true
+        // Deliberately not layer-backed. A transparent layer retains whatever
+        // was drawn on a previous pass, leaving stale guides below the text;
+        // an unlayered view is composited fresh each time.
     }
 
     @available(*, unavailable)
