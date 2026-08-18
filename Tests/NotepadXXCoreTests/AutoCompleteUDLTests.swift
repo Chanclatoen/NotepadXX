@@ -194,3 +194,58 @@ final class UDLSerializationTests: XCTestCase {
         XCTAssertEqual(languages.map(\.name), ["One", "Two"])
     }
 }
+
+final class CompletionDataTests: XCTestCase {
+    private func makeStore() throws -> (CompletionDataStore, URL) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("npxx-ac-\(UUID().uuidString)", isDirectory: true)
+        return (try CompletionDataStore(directory: dir), dir)
+    }
+
+    func testBuiltInEntriesCarrySignatures() {
+        let entries = BuiltInCompletionData.entries(forLanguage: "C")
+        XCTAssertFalse(entries.isEmpty)
+        XCTAssertNotNil(entries.first { $0.name == "printf" }?.signature)
+    }
+
+    func testUnknownLanguageHasNoEntries() {
+        XCTAssertTrue(BuiltInCompletionData.entries(forLanguage: "Brainfuck").isEmpty)
+    }
+
+    /// A user file must be able to correct a bad built-in, not merely add to it.
+    func testUserDataReplacesTheShippedSet() throws {
+        let (store, dir) = try makeStore()
+        XCTAssertFalse(store.entries(forLanguage: "C").isEmpty)
+
+        try store.save(LanguageCompletionData(
+            languageName: "C", entries: [CompletionEntry(name: "my_own", signature: "my_own(void)")]
+        ))
+        let reopened = try CompletionDataStore(directory: dir)
+        XCTAssertEqual(reopened.entries(forLanguage: "C").map(\.name), ["my_own"])
+    }
+
+    func testApiEntriesRankAheadOfBufferWords() {
+        let text = "printer printf pri"
+        let items = AutoCompletion.suggestions(
+            in: text, at: (text as NSString).length, language: BuiltInLanguages.c,
+            apiEntries: BuiltInCompletionData.entries(forLanguage: "C")
+        )
+        XCTAssertEqual(items.first?.text, "printf")
+        XCTAssertEqual(items.first?.kind, .function)
+        XCTAssertNotNil(items.first?.detail, "the signature comes through for the call tip")
+    }
+
+    func testCallTipPrefersAShippedSignature() {
+        let tip = AutoCompletion.callTip(
+            for: "printf", in: "printf(\"x\")", languageName: "C",
+            apiEntries: BuiltInCompletionData.entries(forLanguage: "C")
+        )
+        XCTAssertEqual(tip, "int printf(const char *format, ...)")
+    }
+
+    func testCallTipFallsBackToTheDocument() {
+        let text = "func render(width: Int) -> String {\n}\n"
+        let tip = AutoCompletion.callTip(for: "render", in: text, languageName: "Swift")
+        XCTAssertEqual(tip, "func render(width: Int) -> String {")
+    }
+}

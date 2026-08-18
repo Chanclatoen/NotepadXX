@@ -56,7 +56,8 @@ public enum AutoCompletion {
     /// case is preferred, so typing `wid` ranks `widget` above `Widget`.
     public static func suggestions(
         in text: String, at location: Int, language: LanguageDefinition?,
-        includeWords: Bool = true, includeKeywords: Bool = true, maximum: Int = 50
+        includeWords: Bool = true, includeKeywords: Bool = true, maximum: Int = 50,
+        apiEntries: [CompletionEntry] = []
     ) -> [CompletionItem] {
         let prefix = currentPrefix(in: text, at: location)
         guard !prefix.isEmpty else { return [] }
@@ -85,7 +86,14 @@ public enum AutoCompletion {
             }
         }
 
-        let items = rank(keywords).map { CompletionItem(text: $0, kind: .keyword) }
+        // API entries carry a signature, so they rank with the keywords and
+        // give call tips something real to show.
+        let apiMatches = apiEntries
+            .filter { $0.name.lowercased().hasPrefix(lowered) && $0.name != prefix }
+            .map { CompletionItem(text: $0.name, kind: .function, detail: $0.signature) }
+
+        let items = apiMatches
+            + rank(keywords).map { CompletionItem(text: $0, kind: .keyword) }
             + rank(bufferWords).map { CompletionItem(text: $0, kind: .word) }
         return Array(items.prefix(maximum))
     }
@@ -131,8 +139,13 @@ public enum AutoCompletion {
 
     /// Call tips: function signatures matching the name before an open paren.
     public static func callTip(
-        for functionName: String, in text: String, languageName: String?
+        for functionName: String, in text: String, languageName: String?,
+        apiEntries: [CompletionEntry] = []
     ) -> String? {
+        // A shipped signature beats guessing from the document.
+        if let api = apiEntries.first(where: { $0.name == functionName }), let signature = api.signature {
+            return signature
+        }
         let symbols = FunctionListExtractor.symbols(in: text, languageName: languageName)
         guard symbols.contains(where: { $0.name == functionName }) else { return nil }
         let (lines, _) = LineOperations.split(text)

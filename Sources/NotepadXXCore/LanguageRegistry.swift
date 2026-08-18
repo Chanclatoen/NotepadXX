@@ -65,7 +65,7 @@ public enum BuiltInLanguages {
     public static let all: [LanguageDefinition] = [
         c, cpp, csharp, java, javascript, typescript, swift, python, ruby, php,
         go, rust, shell, sql, html, xml, css, json, yaml, markdown, ini, batch, lua, perl,
-    ] + additional
+    ] + additional + remaining
 
     private static let cFamilyOperators = "+-*/%=<>!&|^~?:;,.()[]{}"
 
