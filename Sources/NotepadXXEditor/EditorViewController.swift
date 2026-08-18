@@ -63,6 +63,13 @@ public final class EditorViewController: NSViewController {
     /// Highlights the bracket partnering the one at the caret.
     public var braceMatchingEnabled = true
     public var showsCurrentLineHighlight = true
+    /// Column for the vertical edge guide; 0 disables it.
+    public var edgeColumn = 0 { didSet { edgeGuideView?.column = edgeColumn } }
+    /// Cmd-click opens links, as in Notepad++'s clickable URLs.
+    public var clickableURLs = true
+    /// Lines changed since load/save, drawn in the gutter.
+    public private(set) var changeHistory = ChangeHistory()
+    private var edgeGuideView: EdgeGuideView?
 
     public init(wrapLines: Bool = false) {
         self.wrapLines = wrapLines
@@ -98,8 +105,23 @@ public final class EditorViewController: NSViewController {
             container.addSubview(subview)
         }
         let widthConstraint = gutterView.widthAnchor.constraint(equalToConstant: 44)
+        // The edge guide overlays the text. It goes in the container rather
+        // than inside the scroll view: NSScrollView retiles its own subviews
+        // and paints over anything foreign added to it.
+        let guideView = EdgeGuideView()
+        guideView.column = edgeColumn
+        guideView.font = baseFont
+        guideView.translatesAutoresizingMaskIntoConstraints = false
+        edgeGuideView = guideView
+        container.addSubview(guideView, positioned: .above, relativeTo: scrollView)
+
         gutterWidthConstraint = widthConstraint
         NSLayoutConstraint.activate([
+            guideView.topAnchor.constraint(equalTo: scrollView.topAnchor),
+            guideView.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor),
+            guideView.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
+            guideView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
+
             gutterView.topAnchor.constraint(equalTo: container.topAnchor),
             gutterView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             gutterView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
@@ -228,6 +250,7 @@ public final class EditorViewController: NSViewController {
         baseFont = NSFont.monospacedSystemFont(ofSize: clamped, weight: .regular)
         invisibles.font = baseFont
         textView.font = baseFont
+        edgeGuideView?.font = baseFont
         highlightVisibleRegion()
         gutterView?.needsDisplay = true
     }
@@ -239,6 +262,29 @@ public final class EditorViewController: NSViewController {
     public var isEditable: Bool {
         get { textView.isEditable }
         set { textView.isEditable = newValue }
+    }
+
+    /// Called after the document is written to disk: modified marks become
+    /// saved marks.
+    public func documentDidSave() {
+        changeHistory.didSave()
+        gutterView?.changedLines = changeHistory.modifiedLines
+        gutterView?.savedChangedLines = changeHistory.savedLines
+    }
+
+    public func resetChangeHistory() {
+        changeHistory.reset()
+        gutterView?.changedLines = []
+        gutterView?.savedChangedLines = []
+    }
+
+    /// Opens the link under the caret, if any. Returns false when there is none.
+    @discardableResult
+    public func openLinkAtCaret() -> Bool {
+        guard clickableURLs,
+              let url = URLDetection.link(at: selectedRange.location, in: textView.string) else { return false }
+        NSWorkspace.shared.open(url)
+        return true
     }
 
     /// The 0-based line range currently on screen, for the Document Map.
@@ -416,6 +462,16 @@ extension EditorViewController: @preconcurrency TextViewDelegate {
             let editedLine = highlighter.line(containing: min(range.location, max(0, textView.string.utf16.count - 1)))
             highlighter.textDidChange(textView.string, editedLine: editedLine)
             highlightVisibleRegion()
+
+            // A replacement spanning newlines shifts every mark below it.
+            let removedLines = range.length > 0 ? 0 : 0
+            let addedLines = string.filter { $0 == "\n" }.count
+            if addedLines != removedLines {
+                changeHistory.shift(fromLine: editedLine + 1, by: addedLines - removedLines)
+            }
+            changeHistory.recordEdit(inLines: editedLine...(editedLine + addedLines))
+            gutterView?.changedLines = changeHistory.modifiedLines
+            gutterView?.savedChangedLines = changeHistory.savedLines
         }
         updateGutterWidth()
         onTextChange?(textView.string)

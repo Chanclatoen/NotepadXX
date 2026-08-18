@@ -111,6 +111,47 @@ extension MainWindowController {
         removeBookmarkedLinesAction(sender)
     }
 
+    // MARK: - Tab bar layout
+
+    @objc public func useHorizontalTabsAction(_ sender: Any?) { setTabLayout(.horizontal) }
+    @objc public func useMultiLineTabsAction(_ sender: Any?) { setTabLayout(.multiLine) }
+    @objc public func useVerticalTabsAction(_ sender: Any?) { setTabLayout(.vertical) }
+
+    func setTabLayout(_ layout: TabBarView.Layout) {
+        tabBar.layout = layout
+        tabBarHeightConstraint?.constant = tabBar.requiredExtent(
+            tabCount: tabs.count, availableWidth: window?.frame.width ?? 1100
+        )
+        refreshUI()
+    }
+
+    // MARK: - Change history
+
+    @objc public func nextChangeAction(_ sender: Any?) {
+        guard let editor = currentEditor,
+              let target = editor.changeHistory.nextChange(after: editor.caretPosition().line - 1)
+        else { NSSound.beep(); return }
+        editor.goToLine(target + 1)
+    }
+
+    @objc public func previousChangeAction(_ sender: Any?) {
+        guard let editor = currentEditor,
+              let target = editor.changeHistory.previousChange(before: editor.caretPosition().line - 1)
+        else { NSSound.beep(); return }
+        editor.goToLine(target + 1)
+    }
+
+    @objc public func toggleChangeHistoryMarginAction(_ sender: Any?) {
+        showChangeHistory.toggle()
+        for editor in allEditors { editor.gutterView?.showChangeHistory = showChangeHistory }
+    }
+
+    /// Opens the link under the caret. Notepad++ makes URLs clickable; on macOS
+    /// the caret-based command also keeps it reachable from the keyboard.
+    @objc public func openLinkAction(_ sender: Any?) {
+        if currentEditor?.openLinkAtCaret() != true { NSSound.beep() }
+    }
+
     // MARK: - Window chrome
 
     @objc public func toggleFullScreenAction(_ sender: Any?) {

@@ -34,6 +34,8 @@ public final class MainWindowController: NSWindowController {
     var showLineEndings = false
     var editorFontSize: CGFloat = 12
     var isDistractionFree = false
+    var showChangeHistory = true
+    var tabBarHeightConstraint: NSLayoutConstraint?
     var hiddenPanelIdentifiers: [String] = []
     /// Bookmarked lines, keyed by document id.
     var bookmarks: [UUID: Bookmarks] = [:]
@@ -46,6 +48,7 @@ public final class MainWindowController: NSWindowController {
     var functionListPanel: FunctionListPanel?
     var folderWorkspacePanel: FolderWorkspacePanel?
     var documentMapPanel: DocumentMapPanel?
+    var projectPanel: ProjectPanel?
     var preferencesStore: PreferencesStore?
     var themeStore: ThemeStore?
     var shortcutMap: ShortcutMap?
@@ -133,11 +136,13 @@ public final class MainWindowController: NSWindowController {
             content.addSubview(subview)
         }
 
+        let tabBarHeight = tabBar.heightAnchor.constraint(equalToConstant: 28)
+        tabBarHeightConstraint = tabBarHeight
         NSLayoutConstraint.activate([
             tabBar.topAnchor.constraint(equalTo: content.topAnchor),
             tabBar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             tabBar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            tabBar.heightAnchor.constraint(equalToConstant: 28),
+            tabBarHeight,
 
             host.topAnchor.constraint(equalTo: tabBar.bottomAnchor),
             host.leadingAnchor.constraint(equalTo: content.leadingAnchor),
@@ -336,7 +341,7 @@ public final class MainWindowController: NSWindowController {
     }
 
     func visiblePanelIdentifiers() -> [String] {
-        ["functionList", "folderWorkspace", "clipboardHistory", "characterPanel", "documentMap"]
+        ["functionList", "folderWorkspace", "clipboardHistory", "characterPanel", "documentMap", "projectPanel"]
             .filter { dockHost?.isVisible($0) == true }
     }
 
@@ -409,6 +414,7 @@ public final class MainWindowController: NSWindowController {
         let document = documents[activeIndex]
         if document.isUntitled { saveDocumentAsAction(sender); return }
         try? document.save()
+        currentEditor?.documentDidSave()
         refreshTabs()
     }
 
@@ -425,6 +431,7 @@ public final class MainWindowController: NSWindowController {
     @objc public func saveAllAction(_ sender: Any?) {
         for document in documents where !document.isUntitled && document.isDirty {
             try? document.save()
+            editors[document.id]?.documentDidSave()
         }
         refreshTabs()
     }

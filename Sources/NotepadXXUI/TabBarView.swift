@@ -8,6 +8,10 @@ final class TabBarView: NSView {
     var onReorder: ((Int, Int) -> Void)?
     var onContextMenu: ((Int, NSPoint) -> Void)?
 
+    /// Tab bar layouts Notepad++ offers.
+    enum Layout { case horizontal, multiLine, vertical }
+    var layout: Layout = .horizontal
+
     private let stack = NSStackView()
 
     override init(frame frameRect: NSRect) {
@@ -16,6 +20,7 @@ final class TabBarView: NSView {
         stack.orientation = .horizontal
         stack.spacing = 1
         stack.alignment = .centerY
+        stack.setHuggingPriority(.defaultLow, for: .horizontal)
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
@@ -28,11 +33,40 @@ final class TabBarView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
+    /// Applies the chosen layout. Vertical and multi-line both stack tabs
+    /// downwards; multi-line wraps, vertical is a single column.
+    private func applyLayout() {
+        switch layout {
+        case .horizontal:
+            stack.orientation = .horizontal
+            stack.alignment = .centerY
+        case .multiLine, .vertical:
+            stack.orientation = .vertical
+            stack.alignment = .leading
+        }
+    }
+
+    /// Height the bar needs for the current layout and tab count.
+    func requiredExtent(tabCount: Int, availableWidth: CGFloat) -> CGFloat {
+        switch layout {
+        case .horizontal:
+            return 28
+        case .vertical:
+            return CGFloat(max(1, tabCount)) * 26 + 4
+        case .multiLine:
+            // Roughly 150pt per tab; wrap into rows that fit the width.
+            let perRow = max(1, Int(availableWidth / 150))
+            let rows = Int(ceil(Double(max(1, tabCount)) / Double(perRow)))
+            return CGFloat(rows) * 26 + 4
+        }
+    }
+
     func configure(
         titles: [String], dirtyFlags: [Bool], selected: Int,
         pinned: [Bool] = [], colours: [NSColor?] = []
     ) {
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        applyLayout()
         for (index, title) in titles.enumerated() {
             let tab = TabItemView(
                 title: title,

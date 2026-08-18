@@ -5,8 +5,8 @@ import Foundation
 /// Distinct from Folder as Workspace: a workspace mirrors a directory, whereas
 /// a project is a hand-picked set of files that may live anywhere. Notepad++
 /// offers both and they are not interchangeable.
-public struct Project: Codable, Equatable, Sendable {
-    public struct Folder: Codable, Equatable, Sendable, Identifiable {
+public struct Project: Codable, Equatable, Hashable, Sendable {
+    public struct Folder: Codable, Equatable, Hashable, Sendable, Identifiable {
         public var id: UUID
         public var name: String
         public var filePaths: [String]

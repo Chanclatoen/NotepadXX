@@ -153,6 +153,7 @@ extension MainWindowController {
         }
         document.adoptContents(of: reloaded)
         currentEditor?.load(text: document.text)
+        currentEditor?.resetChangeHistory()
         refreshUI()
     }
 

@@ -131,3 +131,87 @@ final class FunctionListPanelTests: XCTestCase {
         panel.removeAllRoots()
     }
 }
+
+@MainActor
+final class FloatingPanelTests: XCTestCase {
+    private final class StubPanel: NSObject, DockablePanel {
+        let panelIdentifier = "stub"
+        let panelTitle = "Stub"
+        let preferredPosition = DockPosition.left
+        let contentView = NSView()
+        var visibleCount = 0
+        func panelDidBecomeVisible() { visibleCount += 1 }
+    }
+
+    func testFloatingRemovesFromTheDock() {
+        let host = DockHostView()
+        let panel = StubPanel()
+        host.register(panel)
+        host.show("stub")
+        XCTAssertTrue(host.isVisible("stub"))
+
+        host.float("stub")
+        XCTAssertTrue(host.isFloating("stub"))
+        XCTAssertFalse(host.isVisible("stub"), "a floating panel is not also docked")
+    }
+
+    /// Closing a floating panel must re-dock it, not lose it.
+    func testDockingReturnsThePanelToTheDock() {
+        let host = DockHostView()
+        host.register(StubPanel())
+        host.float("stub")
+        host.dock("stub")
+        XCTAssertFalse(host.isFloating("stub"))
+        XCTAssertTrue(host.isVisible("stub"))
+    }
+
+    func testFloatingTwiceIsANoOp() {
+        let host = DockHostView()
+        host.register(StubPanel())
+        host.float("stub")
+        host.float("stub")
+        XCTAssertTrue(host.isFloating("stub"))
+    }
+
+    func testFloatingPanelsStillRefresh() {
+        let host = DockHostView()
+        let panel = StubPanel()
+        host.register(panel)
+        host.float("stub")
+        let before = panel.visibleCount
+        host.refreshVisiblePanels()
+        XCTAssertGreaterThan(panel.visibleCount, before,
+                             "a floating panel still tracks the active document")
+    }
+}
+
+@MainActor
+final class TabLayoutTests: XCTestCase {
+    func testHorizontalLayoutIsFixedHeight() {
+        let bar = TabBarView()
+        bar.layout = .horizontal
+        XCTAssertEqual(bar.requiredExtent(tabCount: 20, availableWidth: 1000), 28)
+    }
+
+    func testVerticalLayoutGrowsWithTabCount() {
+        let bar = TabBarView()
+        bar.layout = .vertical
+        let two = bar.requiredExtent(tabCount: 2, availableWidth: 1000)
+        let ten = bar.requiredExtent(tabCount: 10, availableWidth: 1000)
+        XCTAssertGreaterThan(ten, two)
+    }
+
+    func testMultiLineWrapsByAvailableWidth() {
+        let bar = TabBarView()
+        bar.layout = .multiLine
+        let wide = bar.requiredExtent(tabCount: 8, availableWidth: 1600)
+        let narrow = bar.requiredExtent(tabCount: 8, availableWidth: 320)
+        XCTAssertGreaterThan(narrow, wide, "a narrower window needs more rows")
+    }
+
+    func testZeroTabsStillHasHeight() {
+        let bar = TabBarView()
+        bar.layout = .multiLine
+        XCTAssertGreaterThan(bar.requiredExtent(tabCount: 0, availableWidth: 1000), 0)
+    }
+}

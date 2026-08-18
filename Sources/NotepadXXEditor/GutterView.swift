@@ -20,6 +20,9 @@ public final class GutterView: NSView {
     public var bookmarkedLines: Set<Int> = [] { didSet { needsDisplay = true } }
     /// 0-based lines edited since the last save.
     public var changedLines: Set<Int> = [] { didSet { needsDisplay = true } }
+    /// 0-based lines edited earlier this session and since saved.
+    public var savedChangedLines: Set<Int> = [] { didSet { needsDisplay = true } }
+    public var showChangeHistory = true { didSet { needsDisplay = true } }
     public var currentLine: Int = 0 { didSet { needsDisplay = true } }
 
     private let horizontalPadding: CGFloat = 8
@@ -63,9 +66,16 @@ public final class GutterView: NSView {
             let y = position.yPos - scrollOffset
             let height = position.height
 
-            if changedLines.contains(index) {
-                NSColor.systemYellow.withAlphaComponent(0.7).setFill()
-                NSRect(x: 0, y: y, width: 3, height: height).fill()
+            if showChangeHistory {
+                // Unsaved edits are amber, saved-this-session edits green, so
+                // the margin distinguishes "not on disk" from "I touched this".
+                if changedLines.contains(index) {
+                    NSColor.systemOrange.withAlphaComponent(0.85).setFill()
+                    NSRect(x: 0, y: y, width: 3, height: height).fill()
+                } else if savedChangedLines.contains(index) {
+                    NSColor.systemGreen.withAlphaComponent(0.7).setFill()
+                    NSRect(x: 0, y: y, width: 3, height: height).fill()
+                }
             }
             if showBookmarks && bookmarkedLines.contains(index) {
                 NSColor.systemBlue.setFill()

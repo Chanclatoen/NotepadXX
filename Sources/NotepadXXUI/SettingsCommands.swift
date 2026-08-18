@@ -44,6 +44,9 @@ extension MainWindowController {
             editor.braceMatchingEnabled = preferences.braceMatching
             editor.gutterView?.showLineNumbers = preferences.showLineNumbers
             editor.gutterView?.showBookmarks = preferences.showBookmarkMargin
+            editor.gutterView?.showChangeHistory = preferences.showChangeHistoryMargin
+            editor.edgeColumn = preferences.edgeColumn
+            editor.clickableURLs = preferences.clickableURLs
             editor.gutterView?.needsDisplay = true
             if let theme = themeStore?.theme(named: preferences.themeName) {
                 editor.applyTheme(theme)

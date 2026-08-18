@@ -40,6 +40,7 @@ public final class DockHostView: NSView {
 
     private var panels: [String: DockablePanel] = [:]
     private var visibleIdentifiers: Set<String> = []
+    private var floatingWindows: [String: NSPanel] = [:]
     private let defaultsKey = "NotepadXX.DockLayout"
 
     public override init(frame frameRect: NSRect) {
@@ -97,6 +98,47 @@ public final class DockHostView: NSView {
         saveLayout()
     }
 
+    /// Tears a panel out of its dock into its own utility window.
+    ///
+    /// Notepad++ lets panels float. On macOS a floating utility panel is the
+    /// natural equivalent; closing it re-docks rather than losing the panel.
+    public func float(_ identifier: String) {
+        guard let panel = panels[identifier], floatingWindows[identifier] == nil else { return }
+        hide(identifier)
+
+        let window = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 420),
+            styleMask: [.titled, .closable, .resizable, .utilityWindow],
+            backing: .buffered, defer: false
+        )
+        window.title = panel.panelTitle
+        window.isFloatingPanel = true
+        window.contentView = panel.contentView
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+
+        floatingWindows[identifier] = window
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: window, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.floatingWindows[identifier] = nil
+                self?.show(identifier)
+            }
+        }
+        panel.panelDidBecomeVisible()
+    }
+
+    public func isFloating(_ identifier: String) -> Bool {
+        floatingWindows[identifier] != nil
+    }
+
+    /// Returns a floating panel to its dock.
+    public func dock(_ identifier: String) {
+        guard let window = floatingWindows[identifier] else { return }
+        window.close()
+    }
+
     public func hide(_ identifier: String) {
         guard let panel = panels[identifier] else { return }
         container(for: panel.preferredPosition).remove(panel)
@@ -107,7 +149,7 @@ public final class DockHostView: NSView {
 
     /// Notifies visible panels that the active document changed.
     public func refreshVisiblePanels() {
-        for identifier in visibleIdentifiers {
+        for identifier in visibleIdentifiers.union(floatingWindows.keys) {
             panels[identifier]?.panelDidBecomeVisible()
         }
     }

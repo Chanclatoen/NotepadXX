@@ -49,15 +49,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // Plugins load before anything can invoke a plugin command.
         windowController.reloadPlugins()
 
-        if ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "1" {
-            windowController.showSpaces = true
-            windowController.showTabs = true
-            windowController.showLineEndings = true
-            windowController.applyInvisibles()
-            windowController.dockHost?.show("documentMap")
-            windowController.dockHost?.show("functionList")
-            windowController.toggleBookmarkAction(nil)
-        }
         if let spec = ProcessInfo.processInfo.environment["NOTEPADXX_RUN_PLUGIN"] {
             let parts = spec.split(separator: "/", maxSplits: 1).map(String.init)
             if parts.count == 2, let error = windowController.pluginHost?.invoke(
@@ -84,7 +75,25 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             windowController.applyPreferences(preferences)
         }
 
+        // Demo overrides go after preferences, which would otherwise reset them.
+        if ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "1" {
+            windowController.showSpaces = true
+            windowController.showTabs = true
+            windowController.showLineEndings = true
+            windowController.applyInvisibles()
+            windowController.dockHost?.show("documentMap")
+            windowController.dockHost?.show("functionList")
+            windowController.toggleBookmarkAction(nil)
+            windowController.setTabLayout(.vertical)
+            for editor in windowController.allEditors { editor.edgeColumn = 40 }
+        }
+
         windowController.loadUserLanguages()
+        // The Float Panel submenu is built from the registered panels.
+        if let viewMenu = NSApp.mainMenu?.items.first(where: { $0.title == "View" }),
+           let floatItem = viewMenu.submenu?.items.first(where: { $0.title == "Float Panel" }) {
+            floatItem.submenu = windowController.buildFloatPanelMenu()
+        }
         windowController.rebuildRecentMenu()
         windowController.rebuildSessionMenu()
         windowController.rebuildProjectMenu()
