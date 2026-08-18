@@ -22,10 +22,19 @@ acceptable. CodeEditTextView is a custom `NSView` + Core Text engine over a
 line-indexed red-black tree (`TextLineStorage`), the same architecture Runestone
 arrived at independently.
 
-**What we get for free:** multi-cursor, rectangular/column selection, the line
-index, undo grouping. Column selection is the single most-cited missing feature
-on macOS and nothing else in the Swift ecosystem implements it — STTextView
-doesn't, and IBeam is pre-production.
+**What we get for free:** multi-cursor (`setSelectedRanges`), rectangular/column
+selection via Option+drag (`TextView+ColumnSelection.swift`, wired into
+`mouseDragged`), the line index, and undo grouping. Column selection is the
+single most-cited missing feature on macOS and nothing else in the Swift
+ecosystem implements it — STTextView doesn't, and IBeam is pre-production.
+
+What the engine does *not* provide is Notepad++'s **Column Editor** — batch
+insertion of text or an incrementing number down a rectangular block. That lives
+in `NotepadXXCore/ColumnSelection.swift`, which also exposes offset<->(line,
+column) conversion and programmatic block-range computation. Short lines in a
+ragged block collapse to an empty range at their end rather than being dropped,
+so typing still affects every spanned line (Notepad++'s virtual-space
+behaviour).
 
 **What we do NOT depend on:** `CodeEditSourceEditor`. See "Rejected dependencies".
 

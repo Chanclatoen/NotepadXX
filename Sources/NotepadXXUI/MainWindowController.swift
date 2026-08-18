@@ -16,6 +16,7 @@ public final class MainWindowController: NSWindowController {
     public var tabWidth: Int = 4
     var installedFindPanel: FindPanelController?
     var installedResultsPanel: SearchResultsPanelController?
+    var installedColumnEditor: ColumnEditorPanel?
 
     public init() {
         let window = NSWindow(

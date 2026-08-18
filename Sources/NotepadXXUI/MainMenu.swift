@@ -126,6 +126,7 @@ public enum MainMenu {
             })
 
             menu.addItem(.separator())
+            add(menu, "Column Editor…", #selector(MainWindowController.columnEditorAction(_:)), "c", [.command, .option])
             add(menu, "Insert Date/Time", #selector(MainWindowController.insertDateTimeAction(_:)))
         }
     }

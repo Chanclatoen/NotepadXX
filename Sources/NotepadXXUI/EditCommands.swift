@@ -180,3 +180,34 @@ extension MainWindowController {
         refreshUI()
     }
 }
+
+/// Column mode. The rectangular *selection* is provided by the text engine
+/// (Option+drag); these commands are the Column Editor batch-insert half.
+extension MainWindowController {
+    @objc public func columnEditorAction(_ sender: Any?) {
+        guard let editor = currentEditor else { return }
+        let panel = ColumnEditorPanel()
+        panel.onInsert = { [weak self] result in
+            guard let self, let editor = self.currentEditor else { return }
+            let lines = editor.selectedLineRange()
+            let column = ColumnSelection.position(
+                ofOffset: editor.selectedRange.location, in: editor.text
+            ).column
+            let updated: String
+            switch result {
+            case .text(let insertion):
+                updated = ColumnSelection.insertText(insertion, in: editor.text, lines: lines, column: column)
+            case .numbers(let initial, let increment, let repeatCount, let zeros, let format):
+                updated = ColumnSelection.insertNumbers(
+                    in: editor.text, lines: lines, column: column,
+                    initial: initial, increment: increment, repeatCount: repeatCount,
+                    leadingZeros: zeros, format: format
+                )
+            }
+            editor.replaceAll(with: updated)
+        }
+        _ = editor
+        panel.showWindow(nil)
+        installedColumnEditor = panel
+    }
+}
