@@ -55,6 +55,23 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             windowController.dockHost?.show("functionList")
             windowController.toggleBookmarkAction(nil)
         }
+        if ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "prefs" {
+            windowController.showPreferencesAction(nil)
+        }
+        if ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "shortcuts" {
+            windowController.showShortcutMapperAction(nil)
+        }
+
+        // The Shortcut Mapper's command list is discovered from the menu bar,
+        // so it cannot drift out of step with the menus.
+        if let mainMenu = NSApp.mainMenu, let support = try? SessionStore.defaultDirectory() {
+            let discovered = MainWindowController.discoverCommands(in: mainMenu)
+            windowController.shortcutMap = ShortcutMap(commands: discovered, directory: support)
+            windowController.applyShortcuts()
+        }
+        if let preferences = windowController.preferencesStore?.preferences {
+            windowController.applyPreferences(preferences)
+        }
 
         windowController.showWindow(nil)
 
@@ -62,7 +79,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // verifying the UI where screen capture is unavailable.
         if let path = options.screenshotPath {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                if let window = self.windowController.window {
+                let title = ProcessInfo.processInfo.environment["NOTEPADXX_CAPTURE_WINDOW"]
+                if let title, WindowCapture.writePNG(ofWindowTitled: title, to: path) {
+                    // captured the named auxiliary window
+                } else if let window = self.windowController.window {
                     WindowCapture.writePNG(of: window, to: path)
                 }
                 NSApp.terminate(nil)

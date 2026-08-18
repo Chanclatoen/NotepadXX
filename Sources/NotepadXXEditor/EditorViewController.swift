@@ -27,6 +27,32 @@ public final class EditorViewController: NSViewController {
     /// Syntax highlighting. Nil language means plain text.
     private var highlighter: SyntaxHighlighter?
     public var theme: SyntaxTheme = .system
+
+    /// Applies a stored `EditorTheme`, converting its hex colours.
+    public func applyTheme(_ editorTheme: EditorTheme) {
+        func color(_ hex: String?) -> NSColor? {
+            guard let hex, let rgb = HexColor.components(hex) else { return nil }
+            return NSColor(srgbRed: rgb.red, green: rgb.green, blue: rgb.blue, alpha: 1)
+        }
+        var colors: [TokenType: NSColor] = [:]
+        for token in TokenType.allCases {
+            if let value = color(editorTheme.color(for: token)) { colors[token] = value }
+        }
+        theme = SyntaxTheme(
+            colors: colors,
+            italicTokens: Set(editorTheme.italicTokens.compactMap(TokenType.init(rawValue:))),
+            boldTokens: Set(editorTheme.boldTokens.compactMap(TokenType.init(rawValue:))),
+            plainColor: color(editorTheme.foreground) ?? .labelColor,
+            backgroundColor: color(editorTheme.background) ?? .textBackgroundColor
+        )
+        // TextView draws through its layer; the scroll view owns the backdrop.
+        scrollView.backgroundColor = theme.backgroundColor
+        textView.layer?.backgroundColor = theme.backgroundColor.cgColor
+        gutterView?.textColor = color(editorTheme.gutterForeground) ?? .tertiaryLabelColor
+        gutterView?.backgroundColor = theme.backgroundColor
+        gutterView?.needsDisplay = true
+        highlightVisibleRegion()
+    }
     public private(set) var language: LanguageDefinition?
     private var baseFont: NSFont = .monospacedSystemFont(ofSize: 12, weight: .regular)
 

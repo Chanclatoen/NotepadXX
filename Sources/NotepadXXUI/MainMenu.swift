@@ -18,6 +18,7 @@ public enum MainMenu {
         root.addItem(viewMenu())
         root.addItem(encodingMenu())
         root.addItem(languageMenu())
+        root.addItem(settingsMenu())
         root.addItem(macroMenu())
         root.addItem(runMenu())
         root.addItem(windowMenu())
@@ -208,6 +209,13 @@ public enum MainMenu {
         add(menu, "Export Current Language…", #selector(MainWindowController.exportUDLAction(_:)))
         item.submenu = menu
         return item
+    }
+
+    private static func settingsMenu() -> NSMenuItem {
+        submenu("Settings") { menu in
+            add(menu, "Preferences…", #selector(MainWindowController.showPreferencesAction(_:)), ",")
+            add(menu, "Shortcut Mapper…", #selector(MainWindowController.showShortcutMapperAction(_:)))
+        }
     }
 
     private static func macroMenu() -> NSMenuItem {

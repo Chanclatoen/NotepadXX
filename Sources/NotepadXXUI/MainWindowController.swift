@@ -45,6 +45,11 @@ public final class MainWindowController: NSWindowController {
     var functionListPanel: FunctionListPanel?
     var folderWorkspacePanel: FolderWorkspacePanel?
     var documentMapPanel: DocumentMapPanel?
+    var preferencesStore: PreferencesStore?
+    var themeStore: ThemeStore?
+    var shortcutMap: ShortcutMap?
+    var preferencesWindow: PreferencesWindowController?
+    var shortcutWindow: ShortcutMapperWindowController?
     let macroRecorder = MacroRecorder()
     var lastRecordedSteps: [MacroStep] = []
     var macroStore: MacroStore?
@@ -63,6 +68,8 @@ public final class MainWindowController: NSWindowController {
         if let support = try? SessionStore.defaultDirectory() {
             macroStore = try? MacroStore(directory: support)
             runCommandStore = try? RunCommandStore(directory: support)
+            preferencesStore = try? PreferencesStore(directory: support)
+            themeStore = try? ThemeStore(directory: support)
         }
     }
 

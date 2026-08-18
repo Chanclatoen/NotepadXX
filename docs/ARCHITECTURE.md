@@ -131,6 +131,22 @@ ICU is *more* permissive on lookbehind (bounded variable-length vs Boost's
 fixed-length). Decision pending: ship ICU and document divergence in-app, or
 vendor a Boost-compatible engine. Do not silently reinterpret patterns.
 
+## Verifying the UI
+
+`NotepadXX --screenshot <path>` renders the window through the view hierarchy
+and exits. It needs no Screen Recording grant, so it works from CI and over
+SSH, and it is how five real defects were found that the whole test suite had
+missed — command-line files being ignored, a missing gutter, an invisible
+status bar, duplicate tabs for one file, and an off-by-one caret line.
+
+**It cannot capture SwiftUI-hosted AppKit controls.** Modern `NSButton`,
+`NSPopUpButton` and friends render through `_NSCoreHostingView`, which neither
+`cacheDisplay` nor layer rendering reproduces off-screen. A correct
+Preferences pane therefore photographs as blank. Do not "fix" a pane that
+looks empty in a capture — assert real subview frames instead, as
+`SettingsWindowTests` does. Custom-drawn views, text, and the editor itself
+capture fine.
+
 ## Module layout
 
 - `NotepadXXCore` — document model, buffers, session/crash recovery, encoding
