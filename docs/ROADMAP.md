@@ -58,10 +58,9 @@ in `docs/parity/` (~884 catalogued commands).
 - [x] Edge guide, clickable URLs
 - [x] Docked project panel, vertical and multi-line tab layouts, floating panels
 
-## Remaining
+- [x] 95 lexers, per-language completion data with call-tip signatures
 
-**Languages**
-- [ ] Notepad++'s last ~22 lexers, and per-language autocomplete data files
+## Remaining
 
 **Distribution**
 - [ ] Notarized DMG — **blocked**: needs a Developer ID Application
