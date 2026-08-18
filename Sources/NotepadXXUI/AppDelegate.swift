@@ -106,6 +106,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             for editor in windowController.allEditors { editor.showIndentGuides = false }
         }
 
+        if let steps = ProcessInfo.processInfo.environment["NOTEPADXX_ZOOM"].flatMap(Int.init) {
+            for _ in 0..<abs(steps) {
+                steps > 0 ? windowController.zoomInAction(nil) : windowController.zoomOutAction(nil)
+            }
+        }
+
         windowController.showWindow(nil)
 
         // --screenshot <path> renders the window and exits, for CI and for

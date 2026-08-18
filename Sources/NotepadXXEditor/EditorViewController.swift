@@ -292,7 +292,29 @@ public final class EditorViewController: NSViewController {
         invisibles.font = baseFont
         textView.font = baseFont
         edgeGuideView?.font = baseFont
+
+        // Re-apply the font to the text that already exists. Setting
+        // textView.font only changes the typing attributes; every character
+        // already in the storage carries its own .font attribute written by
+        // the highlighter, so without this the document keeps the old size.
+        if let storage = textView.textStorage, storage.length > 0 {
+            let whole = NSRange(location: 0, length: storage.length)
+            storage.beginEditing()
+            storage.addAttribute(.font, value: baseFont, range: whole)
+            storage.endEditing()
+            // Line heights are cached per line; invalidating the range forces
+            // them to be measured again, which is what actually moves the text.
+            textView.layoutManager.invalidateLayoutForRange(whole)
+        }
+        textView.layoutManager.setNeedsLayout()
+        textView.layoutManager.layoutLines()
+        _ = textView.updateFrameIfNeeded()
+
+        // The gutter scales with the text, as Notepad++'s line numbers do.
+        gutterView?.font = .monospacedDigitSystemFont(ofSize: max(8, clamped - 1), weight: .regular)
+        updateGutterWidth()
         highlightVisibleRegion()
+        indentGuideView?.needsDisplay = true
         gutterView?.needsDisplay = true
     }
 
