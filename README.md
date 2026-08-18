@@ -21,7 +21,7 @@ Working editor, not yet at parity. Implemented and verified:
 - Tabs, open/save/save-as/save-all/close, CLI open at `file:line:column`
 - Session restore including **crash-safe unsaved buffers** — untitled scratch
   buffers survive `kill -9` and come back with no save prompt
-- Syntax highlighting for 24 languages, folding, Function List, autocomplete
+- Syntax highlighting for 96 languages, folding, Function List, autocomplete with call tips
 - Column mode with the Column Editor, bookmarks, brace matching
 - Find/Replace, Find in Files with a clickable results panel
 - Split view, Document Map, Folder as Workspace, Clipboard History
@@ -30,7 +30,8 @@ Working editor, not yet at parity. Implemented and verified:
 - Encoding/BOM handling with Notepad++'s "Convert to" vs "Encode in" split
 - Large-file performance validated (see below)
 
-See `docs/ROADMAP.md` for what is still missing.
+Every feature category in the parity matrices now has a working
+implementation. See `docs/ROADMAP.md` for the remaining detail.
 
 ## Performance
 
