@@ -147,6 +147,11 @@ public enum MainMenu {
         submenu("View") { menu in
             add(menu, "Word Wrap", #selector(MainWindowController.toggleWordWrapAction(_:)))
             menu.addItem(.separator())
+            add(menu, "Function List", #selector(MainWindowController.toggleFunctionListAction(_:)))
+            add(menu, "Folder as Workspace…", #selector(MainWindowController.openFolderAsWorkspaceAction(_:)))
+            add(menu, "Clipboard History", #selector(MainWindowController.toggleClipboardHistoryAction(_:)))
+            add(menu, "Character Panel", #selector(MainWindowController.toggleCharacterPanelAction(_:)))
+            menu.addItem(.separator())
             add(menu, "Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control])
         }
     }

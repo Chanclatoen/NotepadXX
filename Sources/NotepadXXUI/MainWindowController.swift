@@ -17,6 +17,9 @@ public final class MainWindowController: NSWindowController {
     var installedFindPanel: FindPanelController?
     var installedResultsPanel: SearchResultsPanelController?
     var installedColumnEditor: ColumnEditorPanel?
+    var dockHost: DockHostView?
+    var functionListPanel: FunctionListPanel?
+    var folderWorkspacePanel: FolderWorkspacePanel?
 
     public init() {
         let window = NSWindow(
@@ -41,10 +44,13 @@ public final class MainWindowController: NSWindowController {
         tabBar.onSelect = { [weak self] index in self?.activate(index: index) }
         tabBar.onClose = { [weak self] index in self?.close(index: index) }
 
-        editorContainer = NSView()
+        let host = DockHostView()
+        dockHost = host
+        installPanels(into: host)
+        editorContainer = host.editorContainer
         statusBar = StatusBarView()
 
-        for subview in [tabBar!, editorContainer!, statusBar!] {
+        for subview in [tabBar!, host as NSView, statusBar!] {
             subview.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(subview)
         }
@@ -55,11 +61,11 @@ public final class MainWindowController: NSWindowController {
             tabBar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
             tabBar.heightAnchor.constraint(equalToConstant: 28),
 
-            editorContainer.topAnchor.constraint(equalTo: tabBar.bottomAnchor),
-            editorContainer.leadingAnchor.constraint(equalTo: content.leadingAnchor),
-            editorContainer.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            host.topAnchor.constraint(equalTo: tabBar.bottomAnchor),
+            host.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            host.trailingAnchor.constraint(equalTo: content.trailingAnchor),
 
-            statusBar.topAnchor.constraint(equalTo: editorContainer.bottomAnchor),
+            statusBar.topAnchor.constraint(equalTo: host.bottomAnchor),
             statusBar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             statusBar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
             statusBar.bottomAnchor.constraint(equalTo: content.bottomAnchor),
@@ -143,6 +149,7 @@ public final class MainWindowController: NSWindowController {
     public func refreshUI() {
         refreshTabs()
         refreshStatus()
+        refreshPanels()
     }
 
     private func refreshTabs() {
