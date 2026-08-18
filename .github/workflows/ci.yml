@@ -13,7 +13,7 @@ jobs:
     # executables built from source".
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Select the newest Xcode
         run: |
@@ -34,7 +34,7 @@ jobs:
           ./dist/NotepadXX.app/Contents/MacOS/NotepadXX --screenshot /tmp/ui.png
           test -s /tmp/ui.png || { echo "app produced no window"; exit 1; }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: ui-screenshot
