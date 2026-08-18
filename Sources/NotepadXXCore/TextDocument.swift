@@ -12,6 +12,8 @@ public final class TextDocument: Identifiable, @unchecked Sendable {
     public private(set) var isDirty: Bool
     /// Notepad++ lets a tab be marked read-only independently of file permissions.
     public var isReadOnly: Bool
+    /// Selected syntax language, or nil for plain text. Persisted in the session.
+    public var languageName: String?
     /// Modification date observed at load/save, used for on-disk change detection.
     public private(set) var lastKnownModification: Date?
 

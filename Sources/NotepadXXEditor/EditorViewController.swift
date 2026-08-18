@@ -22,6 +22,12 @@ public final class EditorViewController: NSViewController {
 
     private var wrapLines: Bool
 
+    /// Syntax highlighting. Nil language means plain text.
+    private var highlighter: SyntaxHighlighter?
+    public var theme: SyntaxTheme = .system
+    public private(set) var language: LanguageDefinition?
+    private var baseFont: NSFont = .monospacedSystemFont(ofSize: 12, weight: .regular)
+
     public init(wrapLines: Bool = false) {
         self.wrapLines = wrapLines
         super.init(nibName: nil, bundle: nil)
@@ -53,6 +59,64 @@ public final class EditorViewController: NSViewController {
             textView.frame = NSRect(origin: .zero, size: scrollView.contentSize)
         }
         textView.setText(text)
+        highlighter?.setText(text)
+        highlightVisibleRegion()
+    }
+
+    /// Sets the language and re-highlights. Passing nil clears highlighting.
+    public func setLanguage(_ language: LanguageDefinition?) {
+        self.language = language
+        if let language {
+            let highlighter = SyntaxHighlighter(language: language)
+            highlighter.setText(textView.string)
+            self.highlighter = highlighter
+        } else {
+            self.highlighter = nil
+            clearHighlighting()
+        }
+        highlightVisibleRegion()
+    }
+
+    private func clearHighlighting() {
+        guard let storage = textView.textStorage else { return }
+        let whole = NSRange(location: 0, length: storage.length)
+        storage.beginEditing()
+        storage.setAttributes([.foregroundColor: theme.plainColor, .font: baseFont], range: whole)
+        storage.endEditing()
+    }
+
+    /// Highlights the lines currently on screen (plus a margin), which is what
+    /// keeps highlighting affordable on very large documents.
+    public func highlightVisibleRegion() {
+        guard let highlighter, let storage = textView.textStorage, storage.length > 0 else { return }
+
+        let visible = scrollView.documentVisibleRect
+        let startOffset = textView.layoutManager.textOffsetAtPoint(
+            CGPoint(x: 0, y: max(0, visible.minY))
+        ) ?? 0
+        let endOffset = textView.layoutManager.textOffsetAtPoint(
+            CGPoint(x: 0, y: visible.maxY)
+        ) ?? storage.length
+
+        let margin = 200   // lines of slack so scrolling stays smooth
+        let firstLine = max(0, highlighter.line(containing: min(startOffset, storage.length)) - margin)
+        let lastLine = min(highlighter.lineCount - 1,
+                           highlighter.line(containing: min(endOffset, max(0, storage.length - 1))) + margin)
+        guard firstLine <= lastLine else { return }
+
+        let tokens = highlighter.tokens(forLines: firstLine...lastLine)
+        let regionStart = min(startOffset, storage.length)
+        let regionEnd = min(max(endOffset, regionStart), storage.length)
+        let region = NSRange(location: regionStart, length: regionEnd - regionStart)
+
+        storage.beginEditing()
+        storage.setAttributes([.foregroundColor: theme.plainColor, .font: baseFont], range: region)
+        for token in tokens {
+            let clamped = NSIntersectionRange(token.range, NSRange(location: 0, length: storage.length))
+            guard clamped.length > 0 else { continue }
+            storage.setAttributes(theme.attributes(for: token.type, baseFont: baseFont), range: clamped)
+        }
+        storage.endEditing()
     }
 
     public var text: String { textView.string }
@@ -141,6 +205,11 @@ public final class EditorViewController: NSViewController {
 
 extension EditorViewController: @preconcurrency TextViewDelegate {
     public func textView(_ textView: TextView, didReplaceContentsIn range: NSRange, with string: String) {
+        if let highlighter {
+            let editedLine = highlighter.line(containing: min(range.location, max(0, textView.string.utf16.count - 1)))
+            highlighter.textDidChange(textView.string, editedLine: editedLine)
+            highlightVisibleRegion()
+        }
         onTextChange?(textView.string)
     }
 

@@ -8,6 +8,7 @@ import AppKit
 /// Items are nil-targeted so they travel the responder chain and land on the
 /// key window's controller, which is what keeps them enabled/disabled correctly.
 public enum MainMenu {
+    @MainActor
     public static func build() -> NSMenu {
         let root = NSMenu()
         root.addItem(applicationMenu())
@@ -16,6 +17,7 @@ public enum MainMenu {
         root.addItem(searchMenu())
         root.addItem(viewMenu())
         root.addItem(encodingMenu())
+        root.addItem(languageMenu())
         root.addItem(windowMenu())
         return root
     }
@@ -159,6 +161,13 @@ public enum MainMenu {
             add(menu, "Convert to UTF-8-BOM", #selector(MainWindowController.convertToUTF8BOMAction(_:)))
             add(menu, "Convert to ANSI", #selector(MainWindowController.convertToANSIAction(_:)))
         }
+    }
+
+    @MainActor
+    private static func languageMenu() -> NSMenuItem {
+        let item = NSMenuItem(title: "Language", action: nil, keyEquivalent: "")
+        item.submenu = MainWindowController.buildLanguageMenu()
+        return item
     }
 
     private static func windowMenu() -> NSMenuItem {

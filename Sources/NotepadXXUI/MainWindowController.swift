@@ -93,6 +93,8 @@ public final class MainWindowController: NSWindowController {
         if let existing = editors[document.id] { return existing }
         let controller = EditorViewController()
         controller.loadViewIfNeeded()
+        if document.languageName == nil { autoDetectLanguage(for: document) }
+        controller.setLanguage(document.languageName.flatMap { LanguageRegistry.shared.language(named: $0) })
         controller.load(text: document.text)
         controller.onTextChange = { [weak self, weak document] text in
             guard let document else { return }
