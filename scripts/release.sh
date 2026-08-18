@@ -15,13 +15,19 @@ APP="dist/NotepadXX.app"
 DMG="dist/NotepadXX.dmg"
 VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist" 2>/dev/null || echo "0.0.0")
 
+# Fall back to the Developer ID identity in the keychain, so a machine that
+# already has one does not need it spelled out.
 if [[ -z "${DEVELOPER_ID:-}" ]]; then
-  echo "error: DEVELOPER_ID is not set." >&2
-  echo "A Developer ID Application certificate is required to produce a" >&2
-  echo "distributable build. Without it only ad-hoc signing is possible," >&2
-  echo "which Gatekeeper will refuse on another machine." >&2
+  DEVELOPER_ID=$(security find-identity -v -p codesigning |
+    sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -1)
+fi
+if [[ -z "$DEVELOPER_ID" ]]; then
+  echo "error: no Developer ID Application identity found." >&2
+  echo "Without one only ad-hoc signing is possible, which Gatekeeper will" >&2
+  echo "refuse on another machine. Set DEVELOPER_ID or install the certificate." >&2
   exit 1
 fi
+echo "==> identity: $DEVELOPER_ID"
 
 echo "==> build"
 CONFIG=release ./scripts/make-app.sh
@@ -42,8 +48,23 @@ rm -f "$DMG"
 hdiutil create -volname "NotepadXX" -srcfolder "$APP" -ov -format ULFO "$DMG"
 codesign --force --timestamp --sign "$DEVELOPER_ID" "$DMG"
 
+# Notarization needs credentials beyond the certificate. Without them the
+# build is still Developer ID signed and installable, but Gatekeeper shows a
+# warning on first launch on another Mac, so say so plainly rather than
+# implying the artifact is fully blessed.
+if [[ -z "${NOTARY_APPLE_ID:-}" && -z "${NOTARY_KEY_ID:-}" && -z "${NOTARY_PROFILE:-}" ]]; then
+  echo "==> SIGNED but NOT notarized: $DMG"
+  echo "    Signed with: $DEVELOPER_ID"
+  echo "    Gatekeeper will warn on first launch on another Mac until this is"
+  echo "    notarized. Re-run with NOTARY_APPLE_ID/NOTARY_PASSWORD/NOTARY_TEAM_ID,"
+  echo "    or NOTARY_PROFILE=<keychain profile>, to complete notarization."
+  exit 0
+fi
+
 echo "==> notarize"
-if [[ -n "${NOTARY_KEY_ID:-}" ]]; then
+if [[ -n "${NOTARY_PROFILE:-}" ]]; then
+  xcrun notarytool submit "$DMG" --wait --keychain-profile "$NOTARY_PROFILE"
+elif [[ -n "${NOTARY_KEY_ID:-}" ]]; then
   xcrun notarytool submit "$DMG" --wait \
     --key "$NOTARY_KEY_PATH" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_KEY_ISSUER"
 else
