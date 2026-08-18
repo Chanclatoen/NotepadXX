@@ -21,6 +21,7 @@ public enum MainMenu {
         root.addItem(settingsMenu())
         root.addItem(macroMenu())
         root.addItem(runMenu())
+        root.addItem(pluginsMenu())
         root.addItem(windowMenu())
         return root
     }
@@ -231,6 +232,13 @@ public enum MainMenu {
     private static func runMenu() -> NSMenuItem {
         submenu("Run") { menu in
             add(menu, "Run…", #selector(MainWindowController.runCommandAction(_:)), "r", [.command, .shift])
+        }
+    }
+
+    private static func pluginsMenu() -> NSMenuItem {
+        submenu("Plugins") { menu in
+            add(menu, "Plugins Admin…", #selector(MainWindowController.showPluginsAdminAction(_:)))
+            add(menu, "Open Plugins Folder", #selector(MainWindowController.openPluginsFolderAction(_:)))
         }
     }
 

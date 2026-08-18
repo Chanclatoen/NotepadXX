@@ -50,6 +50,9 @@ public final class MainWindowController: NSWindowController {
     var shortcutMap: ShortcutMap?
     var preferencesWindow: PreferencesWindowController?
     var shortcutWindow: ShortcutMapperWindowController?
+    var pluginRegistry: PluginRegistry?
+    var pluginHost: PluginHost?
+    var pluginsAdminWindow: PluginsAdminWindowController?
     let macroRecorder = MacroRecorder()
     var lastRecordedSteps: [MacroStep] = []
     var macroStore: MacroStore?
@@ -70,6 +73,7 @@ public final class MainWindowController: NSWindowController {
             runCommandStore = try? RunCommandStore(directory: support)
             preferencesStore = try? PreferencesStore(directory: support)
             themeStore = try? ThemeStore(directory: support)
+            pluginRegistry = try? PluginRegistry(directory: support)
         }
     }
 

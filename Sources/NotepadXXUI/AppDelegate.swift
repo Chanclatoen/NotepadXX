@@ -46,6 +46,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Demo mode drives the new display options for screenshot verification.
+        // Plugins load before anything can invoke a plugin command.
+        windowController.reloadPlugins()
+
         if ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "1" {
             windowController.showSpaces = true
             windowController.showTabs = true
@@ -54,6 +57,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             windowController.dockHost?.show("documentMap")
             windowController.dockHost?.show("functionList")
             windowController.toggleBookmarkAction(nil)
+        }
+        if let spec = ProcessInfo.processInfo.environment["NOTEPADXX_RUN_PLUGIN"] {
+            let parts = spec.split(separator: "/", maxSplits: 1).map(String.init)
+            if parts.count == 2, let error = windowController.pluginHost?.invoke(
+                pluginIdentifier: parts[0], commandID: parts[1]
+            ) {
+                FileHandle.standardError.write(Data("plugin error: \(error)\n".utf8))
+            }
         }
         if ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "prefs" {
             windowController.showPreferencesAction(nil)
