@@ -93,6 +93,44 @@ extension MainWindowController {
         try? UDLSerialization.exportXML(for: [language]).write(to: url, atomically: true, encoding: .utf8)
     }
 
+    @objc public func defineLanguageAction(_ sender: Any?) {
+        let existing = activeDocument?.languageName.flatMap { name in
+            // Only a user-defined language is editable; built-ins are read-only.
+            BuiltInLanguages.all.contains { $0.name == name }
+                ? nil : LanguageRegistry.shared.language(named: name)
+        }
+        let editor = UDLEditorWindowController(editing: existing) { [weak self] language in
+            LanguageRegistry.shared.register(language)
+            self?.rebuildLanguageMenu()
+            self?.persistUserLanguages()
+            self?.applyLanguage(named: language.name)
+        }
+        editor.previewSample = currentEditor?.text
+        udlEditorWindow = editor
+        editor.showWindow(nil)
+        editor.window?.makeKeyAndOrderFront(nil)
+    }
+
+    /// User-defined languages persist as Notepad++ UDL XML, so they can be
+    /// shared with a Notepad++ user unchanged.
+    func persistUserLanguages() {
+        guard let support = try? SessionStore.defaultDirectory() else { return }
+        let builtInNames = Set(BuiltInLanguages.all.map { $0.name })
+        let userLanguages = LanguageRegistry.shared.all.filter { !builtInNames.contains($0.name) }
+        guard !userLanguages.isEmpty else { return }
+        let url = support.appendingPathComponent("userDefinedLanguages.xml")
+        try? UDLSerialization.exportXML(for: userLanguages)
+            .write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    func loadUserLanguages() {
+        guard let support = try? SessionStore.defaultDirectory() else { return }
+        let url = support.appendingPathComponent("userDefinedLanguages.xml")
+        guard let languages = try? UDLSerialization.importLanguages(from: url) else { return }
+        for language in languages { LanguageRegistry.shared.register(language) }
+        rebuildLanguageMenu()
+    }
+
     /// Rebuilds the Language menu in place after the registry changes.
     func rebuildLanguageMenu() {
         guard let languageItem = NSApp.mainMenu?.items.first(where: { $0.title == "Language" }) else { return }

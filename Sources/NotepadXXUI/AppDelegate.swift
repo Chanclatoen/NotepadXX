@@ -84,6 +84,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             windowController.applyPreferences(preferences)
         }
 
+        windowController.loadUserLanguages()
         windowController.rebuildRecentMenu()
 
         windowController.showWindow(nil)

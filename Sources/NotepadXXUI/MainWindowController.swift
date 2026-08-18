@@ -55,6 +55,7 @@ public final class MainWindowController: NSWindowController {
     var pluginRegistry: PluginRegistry?
     var pluginHost: PluginHost?
     var pluginsAdminWindow: PluginsAdminWindowController?
+    var udlEditorWindow: UDLEditorWindowController?
     let macroRecorder = MacroRecorder()
     var lastRecordedSteps: [MacroStep] = []
     var macroStore: MacroStore?
