@@ -39,6 +39,7 @@ public final class MainWindowController: NSWindowController {
     var isOverwriteMode = false
     var toolbar: ToolbarView!
     var tabBarHeightConstraint: NSLayoutConstraint?
+    var multiCaretMonitor: Any?
     var hiddenPanelIdentifiers: [String] = []
     /// Bookmarked lines, keyed by document id.
     var bookmarks: [UUID: Bookmarks] = [:]
@@ -84,6 +85,7 @@ public final class MainWindowController: NSWindowController {
         window.setFrameAutosaveName("NotepadXXMainWindow")
         super.init(window: window)
         buildLayout()
+        installMultiCaretMouseMonitor()
         if let support = try? SessionStore.defaultDirectory() {
             macroStore = try? MacroStore(directory: support)
             runCommandStore = try? RunCommandStore(directory: support)
@@ -345,19 +347,27 @@ public final class MainWindowController: NSWindowController {
         let controller = editorController(for: document)
         let caret = controller.caretPosition()
         let selection = controller.selectedRange
-        let selectedText = selection.length > 0
-            ? (document.text as NSString).substring(with: selection) : ""
+        // With several carets the totals span every selection, not just the
+        // first, or the status bar under-reports what a keystroke will affect.
+        let ranges = controller.selectedRanges
+        let content = document.text as NSString
+        let totalSelected = ranges.reduce(0) { $0 + $1.length }
+        let selectedText = ranges
+            .filter { $0.length > 0 && NSMaxRange($0) <= content.length }
+            .map { content.substring(with: $0) }
+            .joined(separator: "\n")
         statusBar.update(
             documentType: document.languageName ?? "Normal text file",
             length: (document.text as NSString).length,
             lines: document.text.isEmpty ? 1 : LineEnding.counts(in: document.text).lf + 1,
-            selection: selection.length,
+            selection: totalSelected,
             selectedLines: selectedText.isEmpty ? 0 : LineEnding.counts(in: selectedText).lf + 1,
             line: caret.line,
             column: caret.column,
             lineEnding: document.lineEnding.displayName,
             encoding: document.encoding.displayName,
-            isOverwrite: isOverwriteMode
+            isOverwrite: isOverwriteMode,
+            caretCount: ranges.count
         )
         refreshToolbarState()
     }

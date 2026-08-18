@@ -132,6 +132,22 @@ public enum MainMenu {
             })
 
             menu.addItem(.separator())
+            menu.addItem(.separator())
+            let carets = NSMenuItem(title: "Multi-Select", action: nil, keyEquivalent: "")
+            let caretMenu = NSMenu(title: "Multi-Select")
+            add(caretMenu, "Select Next Occurrence",
+                #selector(MainWindowController.selectNextOccurrenceAction(_:)), "d")
+            add(caretMenu, "Select All Occurrences",
+                #selector(MainWindowController.selectAllOccurrencesAction(_:)), "l", [.command, .shift])
+            add(caretMenu, "Undo Last Caret",
+                #selector(MainWindowController.removeLastCaretAction(_:)), "u", [.command, .shift])
+            add(caretMenu, "Split Selection into Lines",
+                #selector(MainWindowController.splitSelectionIntoLinesAction(_:)))
+            add(caretMenu, "Collapse to Single Caret",
+                #selector(MainWindowController.collapseCaretsAction(_:)))
+            carets.submenu = caretMenu
+            menu.addItem(carets)
+            menu.addItem(.separator())
             add(menu, "Space to TAB (All)", #selector(MainWindowController.spacesToTabsAction(_:)))
             add(menu, "Column Editor…", #selector(MainWindowController.columnEditorAction(_:)), "c", [.command, .option])
             add(menu, "Insert Date/Time", #selector(MainWindowController.insertDateTimeAction(_:)))

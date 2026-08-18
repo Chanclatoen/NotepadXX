@@ -91,6 +91,88 @@ public final class EditorViewController: NSViewController {
     public var onTextInserted: ((String) -> Void)?
     /// Called when a fold box in the gutter is clicked.
     public var onToggleFold: ((Int) -> Void)?
+
+    /// Every caret or selection currently active.
+    public var selectedRanges: [NSRange] {
+        get { textView.selectionManager.textSelections.map(\.range) }
+        set { textView.selectionManager.setSelectedRanges(Occurrences.normalized(newValue)) }
+    }
+
+    /// Adds a caret without disturbing the existing ones.
+    public func addCaret(at offset: Int) {
+        let length = (textView.string as NSString).length
+        let clamped = min(max(0, offset), length)
+        // A second caret in the same place would double every keystroke.
+        guard !selectedRanges.contains(where: { $0.location == clamped && $0.length == 0 }) else { return }
+        selectedRanges = selectedRanges + [NSRange(location: clamped, length: 0)]
+    }
+
+    /// Collapses a multi-selection back to a single caret at the first one.
+    public func collapseToSingleCaret() {
+        guard let first = selectedRanges.min(by: { $0.location < $1.location }) else { return }
+        textView.selectionManager.setSelectedRange(NSRange(location: first.location, length: first.length))
+    }
+
+    /// Selects the next occurrence of the current selection, adding a caret.
+    /// With nothing selected, selects the word under the caret first — the
+    /// behaviour every editor with this feature shares.
+    @discardableResult
+    public func selectNextOccurrence() -> Bool {
+        let existing = selectedRanges
+        guard let last = existing.max(by: { $0.location < $1.location }) else { return false }
+
+        let needle: String
+        if last.length > 0 {
+            needle = (textView.string as NSString).substring(with: last)
+        } else {
+            guard let word = Occurrences.word(at: last.location, in: textView.string) else { return false }
+            // First press just selects the word under the caret.
+            selectedRanges = existing.filter { $0 != last } + [word.range]
+            return true
+        }
+
+        guard let next = Occurrences.next(of: needle, in: textView.string, after: last.location),
+              !existing.contains(next) else { return false }
+        selectedRanges = existing + [next]
+        textView.scrollToVisible(textView.layoutManager.rectForOffset(next.location) ?? .zero)
+        return true
+    }
+
+    /// Puts a caret on every occurrence of the current selection or word.
+    @discardableResult
+    public func selectAllOccurrences() -> Bool {
+        guard let current = selectedRanges.first else { return false }
+        let needle: String
+        let wholeWord: Bool
+        if current.length > 0 {
+            needle = (textView.string as NSString).substring(with: current)
+            wholeWord = false
+        } else {
+            guard let word = Occurrences.word(at: current.location, in: textView.string) else { return false }
+            needle = word.text
+            wholeWord = true
+        }
+
+        let matches = Occurrences.all(of: needle, in: textView.string, wholeWord: wholeWord)
+        guard !matches.isEmpty else { return false }
+        selectedRanges = matches
+        return true
+    }
+
+    /// Removes the most recently added caret.
+    @discardableResult
+    public func removeLastCaret() -> Bool {
+        let ranges = selectedRanges
+        guard ranges.count > 1 else { return false }
+        selectedRanges = Array(ranges.dropLast())
+        return true
+    }
+
+    /// The document offset under a point in the text view, for modifier-click.
+    public func offset(at pointInWindow: NSPoint) -> Int? {
+        let local = textView.convert(pointInWindow, from: nil)
+        return textView.layoutManager.textOffsetAtPoint(local)
+    }
     /// Lines changed since load/save, drawn in the gutter.
     public private(set) var changeHistory = ChangeHistory()
     private var edgeGuideView: EdgeGuideView?

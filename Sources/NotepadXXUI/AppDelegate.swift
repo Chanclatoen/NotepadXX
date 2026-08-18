@@ -61,6 +61,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             windowController.showPluginsAdminAction(nil)
             windowController.pluginsAdminWindow?.showAvailableTab()
         }
+        if ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "carets" {
+            windowController.currentEditor?.selectedRange = NSRange(location: 0, length: 0)
+            windowController.selectAllOccurrencesAction(nil)
+        }
         if ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "prefs" {
             windowController.showPreferencesAction(nil)
         }

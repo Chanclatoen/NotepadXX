@@ -108,12 +108,19 @@ public final class StatusBarView: NSView {
         selection: Int, selectedLines: Int,
         line: Int, column: Int,
         lineEnding: String, encoding: String,
-        isOverwrite: Bool
+        isOverwrite: Bool,
+        caretCount: Int = 1
     ) {
         typeField.stringValue = documentType
         lengthField.stringValue = "length : \(length)    lines : \(lines)"
-        // Notepad++ shows selection as "characters : lines".
-        positionField.stringValue = "Ln : \(line)    Col : \(column)    Sel : \(selection) | \(selectedLines)"
+        // Notepad++ shows selection as "characters | lines", and switches to a
+        // caret count when several carets are active, since a single Ln/Col is
+        // meaningless then.
+        if caretCount > 1 {
+            positionField.stringValue = "\(caretCount) carets    Sel : \(selection) | \(selectedLines)"
+        } else {
+            positionField.stringValue = "Ln : \(line)    Col : \(column)    Sel : \(selection) | \(selectedLines)"
+        }
         lineEndingField.stringValue = lineEnding
         encodingField.stringValue = encoding
         insertField.stringValue = isOverwrite ? "OVR" : "INS"
