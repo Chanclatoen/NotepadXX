@@ -133,4 +133,8 @@ public final class TextDocument: Identifiable, @unchecked Sendable {
     }
 
     public func markClean() { isDirty = false }
+
+    /// Marks the document as needing a save without altering `text` — used by
+    /// commands that change how bytes are written (encoding, line endings).
+    public func markDirty() { isDirty = true }
 }

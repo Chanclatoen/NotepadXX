@@ -69,6 +69,58 @@ public final class EditorViewController: NSViewController {
         scrollView.hasHorizontalScroller = !wrap
     }
 
+    /// The 0-based inclusive line range covered by the current selection.
+    /// A caret with no selection yields the single line it sits on.
+    public func selectedLineRange() -> ClosedRange<Int> {
+        let content = textView.string as NSString
+        let selection = selectedRange
+        let firstLine = lineIndex(at: selection.location, in: content)
+        let lastLocation = selection.length > 0 ? NSMaxRange(selection) - 1 : selection.location
+        let lastLine = lineIndex(at: max(lastLocation, selection.location), in: content)
+        return firstLine...max(firstLine, lastLine)
+    }
+
+    private func lineIndex(at location: Int, in content: NSString) -> Int {
+        guard location > 0 else { return 0 }
+        var index = 0
+        content.enumerateSubstrings(
+            in: NSRange(location: 0, length: min(location, content.length)),
+            options: [.byLines, .substringNotRequired]
+        ) { _, _, _, _ in index += 1 }
+        return index
+    }
+
+    /// Replaces the whole buffer, preserving the caret position where possible.
+    public func replaceAll(with newText: String) {
+        let caret = selectedRange.location
+        textView.setText(newText)
+        let clamped = min(caret, (newText as NSString).length)
+        selectedRange = NSRange(location: clamped, length: 0)
+        onTextChange?(newText)
+    }
+
+    /// Replaces just the selected range.
+    public func replaceSelection(with replacement: String) {
+        let selection = selectedRange
+        textView.replaceCharacters(in: selection, with: replacement)
+        onTextChange?(textView.string)
+    }
+
+    /// Moves the caret to the start of a 1-based line and scrolls it into view.
+    public func goToLine(_ line: Int) {
+        let content = textView.string as NSString
+        var starts: [Int] = [0]
+        content.enumerateSubstrings(
+            in: NSRange(location: 0, length: content.length),
+            options: [.byLines, .substringNotRequired]
+        ) { _, _, enclosing, _ in starts.append(NSMaxRange(enclosing)) }
+        let index = min(max(0, line - 1), max(0, starts.count - 1))
+        let location = starts[index]
+        selectedRange = NSRange(location: min(location, content.length), length: 0)
+        textView.scrollToVisible(NSRect(origin: .zero, size: .zero))
+        textView.scrollSelectionToVisible()
+    }
+
     /// 1-based line and column for the caret, for the status bar.
     public func caretPosition() -> (line: Int, column: Int) {
         let location = selectedRange.location

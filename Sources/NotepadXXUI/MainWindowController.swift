@@ -12,6 +12,10 @@ public final class MainWindowController: NSWindowController {
     private var editorContainer: NSView!
     private var editors: [UUID: EditorViewController] = [:]
     private var untitledCounter = 0
+    /// Indentation width used by tab/space conversion commands.
+    public var tabWidth: Int = 4
+    var installedFindPanel: FindPanelController?
+    var installedResultsPanel: SearchResultsPanelController?
 
     public init() {
         let window = NSWindow(
@@ -84,7 +88,7 @@ public final class MainWindowController: NSWindowController {
         return document
     }
 
-    private func editor(for document: TextDocument) -> EditorViewController {
+    public func editorController(for document: TextDocument) -> EditorViewController {
         if let existing = editors[document.id] { return existing }
         let controller = EditorViewController()
         controller.loadViewIfNeeded()
@@ -103,7 +107,7 @@ public final class MainWindowController: NSWindowController {
     private func activate(index: Int) {
         guard documents.indices.contains(index) else { return }
         activeIndex = index
-        let controller = editor(for: documents[index])
+        let controller = editorController(for: documents[index])
 
         editorContainer.subviews.forEach { $0.removeFromSuperview() }
         let editorView = controller.view
@@ -132,6 +136,12 @@ public final class MainWindowController: NSWindowController {
         refreshTabs()
     }
 
+    /// Refreshes tab titles and the status bar after an external change.
+    public func refreshUI() {
+        refreshTabs()
+        refreshStatus()
+    }
+
     private func refreshTabs() {
         tabBar.configure(
             titles: documents.map { $0.displayName },
@@ -144,7 +154,7 @@ public final class MainWindowController: NSWindowController {
     private func refreshStatus() {
         guard documents.indices.contains(activeIndex) else { return }
         let document = documents[activeIndex]
-        let controller = editor(for: document)
+        let controller = editorController(for: document)
         let caret = controller.caretPosition()
         let selection = controller.selectedRange
         statusBar.update(
@@ -156,6 +166,16 @@ public final class MainWindowController: NSWindowController {
             lineEnding: document.lineEnding.displayName,
             encoding: document.encoding.displayName
         )
+    }
+
+    /// Focuses an existing tab.
+    public func selectTab(at index: Int) { activate(index: index) }
+
+    /// Adds a document as a new tab and focuses it.
+    public func appendDocument(_ document: TextDocument) {
+        documents.append(document)
+        activate(index: documents.count - 1)
+        refreshTabs()
     }
 
     // MARK: - Menu actions
@@ -204,7 +224,7 @@ public final class MainWindowController: NSWindowController {
 
     @objc public func toggleWordWrapAction(_ sender: Any?) {
         guard documents.indices.contains(activeIndex) else { return }
-        let controller = editor(for: documents[activeIndex])
+        let controller = editorController(for: documents[activeIndex])
         controller.setWrapLines(!(controller.textView.wrapLines))
     }
 
