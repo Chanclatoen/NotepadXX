@@ -168,6 +168,28 @@ public final class EditorViewController: NSViewController {
         return true
     }
 
+    /// Highlights marked ranges, one list per Mark style.
+    ///
+    /// Emphases are keyed per style so clearing one style does not disturb the
+    /// others, and marks are inactive so they never move the caret.
+    public func applyMarks(_ rangesByStyle: [[NSRange]]) {
+        guard let manager = textView.emphasisManager else { return }
+        for (index, ranges) in rangesByStyle.enumerated() {
+            let id = "mark\(index)"
+            manager.removeEmphases(for: id)
+            guard !ranges.isEmpty else { continue }
+            manager.addEmphases(
+                ranges.map { Emphasis(range: $0, style: .standard, inactive: true) }, for: id
+            )
+        }
+    }
+
+    /// Scrolls a range into view, used by incremental search.
+    public func scrollRangeToVisible(_ range: NSRange) {
+        guard let rect = textView.layoutManager.rectForOffset(range.location) else { return }
+        textView.scrollToVisible(rect)
+    }
+
     /// The document offset under a point in the text view, for modifier-click.
     public func offset(at pointInWindow: NSPoint) -> Int? {
         let local = textView.convert(pointInWindow, from: nil)

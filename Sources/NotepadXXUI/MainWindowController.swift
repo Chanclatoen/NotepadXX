@@ -40,6 +40,14 @@ public final class MainWindowController: NSWindowController {
     var toolbar: ToolbarView!
     var tabBarHeightConstraint: NSLayoutConstraint?
     var multiCaretMonitor: Any?
+    var searchHistory: SearchHistory?
+    var lastSearchOptions = SearchOptions()
+    /// Marked ranges per document, for the Mark tab's five styles.
+    var markedRanges: [UUID: MarkedRanges] = [:]
+    var activeMarkStyle = 0
+    var incrementalBar: IncrementalSearchBar?
+    var incrementalOrigin = 0
+    private var incrementalHeightConstraint: NSLayoutConstraint?
     var hiddenPanelIdentifiers: [String] = []
     /// Bookmarked lines, keyed by document id.
     var bookmarks: [UUID: Bookmarks] = [:]
@@ -107,6 +115,7 @@ public final class MainWindowController: NSWindowController {
             namedSessions = try? NamedSessionStore(directory: support)
             projectStore = try? ProjectStore(directory: support)
             completionData = try? CompletionDataStore(directory: support)
+            searchHistory = SearchHistory.load(from: support)
             recentFiles = RecentFiles(
                 directory: support,
                 limit: preferencesStore?.preferences.recentFilesLimit ?? 15
@@ -386,6 +395,32 @@ public final class MainWindowController: NSWindowController {
     func appendClone(of document: TextDocument, inPane pane: Int) {
         tabs.append(EditorTab(document: document, pane: pane))
         refreshTabs()
+    }
+
+    /// Shows the incremental search strip above the status bar.
+    func showIncrementalBar() {
+        guard let bar = incrementalBar, let content = window?.contentView else { return }
+        if bar.superview == nil {
+            bar.translatesAutoresizingMaskIntoConstraints = false
+            content.addSubview(bar)
+            let height = bar.heightAnchor.constraint(equalToConstant: 28)
+            incrementalHeightConstraint = height
+            NSLayoutConstraint.activate([
+                bar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+                bar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+                bar.bottomAnchor.constraint(equalTo: statusBar.topAnchor),
+                height,
+            ])
+        }
+        bar.isHidden = false
+        incrementalHeightConstraint?.constant = 28
+        bar.focus()
+    }
+
+    func hideIncrementalBar() {
+        incrementalBar?.isHidden = true
+        incrementalHeightConstraint?.constant = 0
+        if let editor = currentEditor { window?.makeFirstResponder(editor.textView) }
     }
 
     /// Every editor that currently exists, including the second pane's.

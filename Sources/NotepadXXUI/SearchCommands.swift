@@ -17,6 +17,18 @@ extension MainWindowController {
         findPanel().focusFindInFiles()
     }
 
+    /// Records what was searched for, so Find Next and the dropdowns work.
+    func rememberSearch(_ request: FindPanelController.Request) {
+        lastSearchOptions = request.options
+        searchHistory?.record(request.pattern, in: .pattern)
+        if !request.replacement.isEmpty {
+            searchHistory?.record(request.replacement, in: .replacement)
+        }
+        if let support = try? SessionStore.defaultDirectory() {
+            searchHistory?.save(to: support)
+        }
+    }
+
     @objc public func showFindPanelAction(_ sender: Any?) {
         let panel = findPanel()
         panel.showWindow(nil)
@@ -58,6 +70,7 @@ extension MainWindowController {
     }
 
     func performFind(_ request: FindPanelController.Request) {
+        rememberSearch(request)
         guard let editor = currentEditor else { return }
         do {
             let from = request.options.backward
@@ -105,6 +118,7 @@ extension MainWindowController {
     }
 
     func performReplaceAll(_ request: FindPanelController.Request) {
+        rememberSearch(request)
         guard let editor = currentEditor else { return }
         do {
             let (updated, count) = try engine(request).replaceAll(
