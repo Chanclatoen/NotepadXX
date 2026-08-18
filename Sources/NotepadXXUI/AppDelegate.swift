@@ -57,6 +57,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 FileHandle.standardError.write(Data("plugin error: \(error)\n".utf8))
             }
         }
+        if ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "plugins" {
+            windowController.showPluginsAdminAction(nil)
+            windowController.pluginsAdminWindow?.showAvailableTab()
+        }
         if ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "prefs" {
             windowController.showPreferencesAction(nil)
         }

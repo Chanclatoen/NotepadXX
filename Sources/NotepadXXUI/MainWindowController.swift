@@ -66,6 +66,7 @@ public final class MainWindowController: NSWindowController {
     var activeProjectName: String?
     var pluginRegistry: PluginRegistry?
     var pluginHost: PluginHost?
+    var pluginRepository: PluginRepository?
     var pluginsAdminWindow: PluginsAdminWindowController?
     var udlEditorWindow: UDLEditorWindowController?
     let macroRecorder = MacroRecorder()
@@ -89,6 +90,18 @@ public final class MainWindowController: NSWindowController {
             preferencesStore = try? PreferencesStore(directory: support)
             themeStore = try? ThemeStore(directory: support)
             pluginRegistry = try? PluginRegistry(directory: support)
+            // The bundled starter catalogue ships with the app; users can add
+            // their own repository URLs.
+            var sources: [URL] = []
+            if let bundled = Bundle.main.url(forResource: "plugin-catalogue", withExtension: "json") {
+                sources.append(bundled)
+            }
+            let userCatalogue = support.appendingPathComponent("plugin-sources.json")
+            if let data = try? Data(contentsOf: userCatalogue),
+               let extra = try? JSONDecoder().decode([String].self, from: data) {
+                sources.append(contentsOf: extra.compactMap(URL.init(string:)))
+            }
+            pluginRepository = PluginRepository(directory: support, sourceURLs: sources)
             namedSessions = try? NamedSessionStore(directory: support)
             projectStore = try? ProjectStore(directory: support)
             completionData = try? CompletionDataStore(directory: support)

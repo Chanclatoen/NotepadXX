@@ -1,0 +1,13 @@
+{
+  "name": "JSON Tools",
+  "identifier": "com.notepadxx.jsontools",
+  "version": "1.0.0",
+  "description": "Pretty-print, minify and validate JSON",
+  "author": "NotepadXX",
+  "main": "main.js",
+  "commands": [
+    { "id": "format", "title": "Format JSON" },
+    { "id": "minify", "title": "Minify JSON" },
+    { "id": "validate", "title": "Validate JSON" }
+  ]
+}

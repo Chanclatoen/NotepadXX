@@ -33,5 +33,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
+# The bundled plugin catalogue must exist before signing, or the signature
+# would not cover it.
+./scripts/build-plugin-catalogue.sh "$APP/Contents/Resources"
+
 codesign --force --deep --sign - "$APP"
 echo "built $APP"

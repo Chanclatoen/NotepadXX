@@ -110,7 +110,9 @@ extension MainWindowController: PluginEditorBridge {
     @objc public func showPluginsAdminAction(_ sender: Any?) {
         guard let registry = pluginRegistry else { return }
         if pluginsAdminWindow == nil {
-            pluginsAdminWindow = PluginsAdminWindowController(registry: registry) { [weak self] in
+            pluginsAdminWindow = PluginsAdminWindowController(
+                registry: registry, repository: pluginRepository
+            ) { [weak self] in
                 self?.reloadPlugins()
             }
         }

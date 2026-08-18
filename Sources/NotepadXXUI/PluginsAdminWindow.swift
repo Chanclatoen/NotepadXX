@@ -5,10 +5,24 @@ import NotepadXXCore
 @MainActor
 public final class PluginsAdminWindowController: NSWindowController {
     private let registry: PluginRegistry
+    private let repository: PluginRepository?
     private let onChange: () -> Void
     private let tableView = NSTableView()
+    private let tabControl = NSSegmentedControl(
+        labels: ["Installed", "Available", "Updates"],
+        trackingMode: .selectOne, target: nil, action: nil
+    )
+    private let searchField = NSSearchField()
+    private let statusLabel = NSTextField(labelWithString: "")
+    private var listings: [PluginListing] = []
 
-    public init(registry: PluginRegistry, onChange: @escaping () -> Void) {
+    /// Which tab is showing.
+    private enum Tab: Int { case installed, available, updates }
+    private var tab: Tab { Tab(rawValue: tabControl.selectedSegment) ?? .installed }
+
+    public init(registry: PluginRegistry, repository: PluginRepository? = nil,
+                onChange: @escaping () -> Void) {
+        self.repository = repository
         self.registry = registry
         self.onChange = onChange
         let window = NSWindow(
@@ -26,6 +40,15 @@ public final class PluginsAdminWindowController: NSWindowController {
 
     private func buildLayout() {
         guard let window else { return }
+        tabControl.selectedSegment = 0
+        tabControl.target = self
+        tabControl.action = #selector(tabChanged)
+        searchField.placeholderString = "Search plugins"
+        searchField.target = self
+        searchField.action = #selector(tabChanged)
+        statusLabel.font = .systemFont(ofSize: 11)
+        statusLabel.textColor = .secondaryLabelColor
+
         for (identifier, title, width) in [
             ("enabled", "", 30), ("name", "Plugin", 200),
             ("version", "Version", 70), ("status", "Status", 260),
@@ -42,21 +65,27 @@ public final class PluginsAdminWindowController: NSWindowController {
         scroll.documentView = tableView
         scroll.hasVerticalScroller = true
 
-        let install = NSButton(title: "Install…", target: self, action: #selector(installTapped))
+        let installSelected = NSButton(title: "Install", target: self, action: #selector(installSelectedTapped))
+        let install = NSButton(title: "Install from Folder…", target: self, action: #selector(installTapped))
         let remove = NSButton(title: "Remove", target: self, action: #selector(removeTapped))
-        let reload = NSButton(title: "Reload", target: self, action: #selector(reloadTapped))
-        for button in [install, remove, reload] { button.bezelStyle = .rounded }
-        let buttons = NSStackView(views: [install, remove, reload])
+        let refresh = NSButton(title: "Refresh", target: self, action: #selector(refreshTapped))
+        for button in [installSelected, install, remove, refresh] { button.bezelStyle = .rounded }
+        let buttons = NSStackView(views: [statusLabel, installSelected, install, remove, refresh])
         buttons.orientation = .horizontal
         buttons.spacing = 8
 
         let content = NSView()
-        for subview in [scroll, buttons] {
+        for subview in [tabControl, searchField, scroll, buttons] {
             subview.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(subview)
         }
         NSLayoutConstraint.activate([
-            scroll.topAnchor.constraint(equalTo: content.topAnchor, constant: 12),
+            tabControl.topAnchor.constraint(equalTo: content.topAnchor, constant: 12),
+            tabControl.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12),
+            searchField.centerYAnchor.constraint(equalTo: tabControl.centerYAnchor),
+            searchField.leadingAnchor.constraint(equalTo: tabControl.trailingAnchor, constant: 12),
+            searchField.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12),
+            scroll.topAnchor.constraint(equalTo: tabControl.bottomAnchor, constant: 12),
             scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12),
             scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12),
             scroll.bottomAnchor.constraint(equalTo: buttons.topAnchor, constant: -10),
@@ -66,10 +95,106 @@ public final class PluginsAdminWindowController: NSWindowController {
         window.contentView = content
     }
 
-    @objc private func reloadTapped() {
-        registry.reload()
+    /// Switches to the Available list and refreshes it.
+    public func showAvailableTab() {
+        tabControl.selectedSegment = 1
+        refreshTapped()
+    }
+
+    @objc private func tabChanged() {
         tableView.reloadData()
-        onChange()
+        updateStatus()
+    }
+
+    @objc private func refreshTapped() {
+        registry.reload()
+        guard let repository else { tableView.reloadData(); onChange(); return }
+
+        statusLabel.stringValue = "Refreshing…"
+        Task { @MainActor in
+            let failures = await repository.refresh()
+            self.tableView.reloadData()
+            self.updateStatus()
+            if !failures.isEmpty {
+                // Say which source failed rather than silently showing nothing.
+                self.statusLabel.stringValue = "\(failures.count) source(s) unavailable"
+            }
+            self.onChange()
+        }
+    }
+
+    private func updateStatus() {
+        switch tab {
+        case .installed:
+            statusLabel.stringValue = "\(registry.plugins.count) installed"
+        case .available:
+            statusLabel.stringValue = "\(currentListings().count) available"
+        case .updates:
+            let count = currentListings().count
+            statusLabel.stringValue = count == 0 ? "Everything is up to date" : "\(count) update(s)"
+        }
+    }
+
+    /// Listings for the active tab, filtered by the search field.
+    private func currentListings() -> [PluginListing] {
+        guard let repository else { return [] }
+        let base: [PluginListing]
+        switch tab {
+        case .installed: base = []
+        case .available:
+            let installed = Set(registry.plugins.map(\.id))
+            base = repository.allListings.filter { !installed.contains($0.identifier) }
+        case .updates:
+            base = repository.availableUpdates(installed: registry.plugins)
+        }
+        let query = searchField.stringValue.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return base }
+        return base.filter {
+            $0.name.localizedCaseInsensitiveContains(query)
+                || $0.description.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    /// One-click install of the selected catalogue entry.
+    @objc private func installSelectedTapped() {
+        guard tab != .installed, let repository else { return }
+        let rows = currentListings()
+        guard rows.indices.contains(tableView.selectedRow) else { return }
+        let listing = rows[tableView.selectedRow]
+
+        statusLabel.stringValue = "Installing \(listing.name)…"
+        Task { @MainActor in
+            do {
+                _ = try await repository.install(listing, into: self.registry.pluginsDirectory)
+                self.registry.reload()
+                self.tableView.reloadData()
+                self.updateStatus()
+                self.onChange()
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = "Could not install \(listing.name)"
+                alert.informativeText = Self.describe(error)
+                alert.runModal()
+                self.updateStatus()
+            }
+        }
+    }
+
+    /// Plain-language errors: a checksum failure in particular needs to read as
+    /// a security refusal, not a network hiccup.
+    static func describe(_ error: Error) -> String {
+        guard let error = error as? PluginRepository.RepositoryError else {
+            return String(describing: error)
+        }
+        switch error {
+        case .checksumMismatch:
+            return "The download did not match the checksum in the catalogue, so it was discarded. "
+                 + "The file may be corrupt or tampered with."
+        case .unreachable(let source): return "Could not reach \(source)."
+        case .malformedCatalogue(let source): return "\(source) is not a valid plugin catalogue."
+        case .notAnArchive(let name): return "\(name) is not a readable archive."
+        case .noPluginInArchive: return "The archive does not contain a plugin.json."
+        }
     }
 
     @objc private func installTapped() {
@@ -88,7 +213,7 @@ public final class PluginsAdminWindowController: NSWindowController {
             alert.informativeText = String(describing: error)
             alert.runModal()
         }
-        reloadTapped()
+        refreshTapped()
     }
 
     @objc private func removeTapped() {
@@ -104,21 +229,39 @@ public final class PluginsAdminWindowController: NSWindowController {
         guard confirm.runModal() == .alertFirstButtonReturn else { return }
 
         try? registry.uninstall(identifier: plugin.id)
-        reloadTapped()
+        refreshTapped()
     }
 
     @objc private func toggleEnabled(_ sender: NSButton) {
         let row = sender.tag
         guard registry.plugins.indices.contains(row) else { return }
         registry.setEnabled(sender.state == .on, forIdentifier: registry.plugins[row].id)
-        reloadTapped()
+        refreshTapped()
     }
 }
 
 extension PluginsAdminWindowController: NSTableViewDataSource, NSTableViewDelegate {
-    public func numberOfRows(in tableView: NSTableView) -> Int { registry.plugins.count }
+    public func numberOfRows(in tableView: NSTableView) -> Int {
+        tab == .installed ? registry.plugins.count : currentListings().count
+    }
 
     public func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        if tab != .installed {
+            let rows = currentListings()
+            guard rows.indices.contains(row) else { return nil }
+            let listing = rows[row]
+            switch tableColumn?.identifier.rawValue {
+            case "enabled": return NSView()
+            case "version": return NSTextField(labelWithString: listing.version)
+            case "status":
+                let field = NSTextField(labelWithString: listing.description)
+                field.textColor = .secondaryLabelColor
+                field.lineBreakMode = .byTruncatingTail
+                return field
+            default: return NSTextField(labelWithString: listing.name)
+            }
+        }
+
         guard registry.plugins.indices.contains(row) else { return nil }
         let plugin = registry.plugins[row]
 

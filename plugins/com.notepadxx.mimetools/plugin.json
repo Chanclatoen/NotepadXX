@@ -1,0 +1,14 @@
+{
+  "name": "MIME Tools",
+  "identifier": "com.notepadxx.mimetools",
+  "version": "1.0.0",
+  "description": "Base64 and URL encode/decode the selection",
+  "author": "NotepadXX",
+  "main": "main.js",
+  "commands": [
+    { "id": "base64Encode", "title": "Base64 Encode" },
+    { "id": "base64Decode", "title": "Base64 Decode" },
+    { "id": "urlEncode", "title": "URL Encode" },
+    { "id": "urlDecode", "title": "URL Decode" }
+  ]
+}

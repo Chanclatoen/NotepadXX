@@ -1,0 +1,12 @@
+{
+  "name": "Text Statistics",
+  "identifier": "com.notepadxx.textstats",
+  "version": "1.0.0",
+  "description": "Word, character, line and paragraph counts",
+  "author": "NotepadXX",
+  "main": "main.js",
+  "commands": [
+    { "id": "summary", "title": "Document Statistics" },
+    { "id": "removeDuplicateLines", "title": "Remove Duplicate Lines" }
+  ]
+}
