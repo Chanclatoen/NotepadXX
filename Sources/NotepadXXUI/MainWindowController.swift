@@ -52,6 +52,9 @@ public final class MainWindowController: NSWindowController {
     var preferencesWindow: PreferencesWindowController?
     var shortcutWindow: ShortcutMapperWindowController?
     var recentFiles: RecentFiles?
+    var namedSessions: NamedSessionStore?
+    var projectStore: ProjectStore?
+    var activeProjectName: String?
     var pluginRegistry: PluginRegistry?
     var pluginHost: PluginHost?
     var pluginsAdminWindow: PluginsAdminWindowController?
@@ -77,6 +80,8 @@ public final class MainWindowController: NSWindowController {
             preferencesStore = try? PreferencesStore(directory: support)
             themeStore = try? ThemeStore(directory: support)
             pluginRegistry = try? PluginRegistry(directory: support)
+            namedSessions = try? NamedSessionStore(directory: support)
+            projectStore = try? ProjectStore(directory: support)
             recentFiles = RecentFiles(
                 directory: support,
                 limit: preferencesStore?.preferences.recentFilesLimit ?? 15

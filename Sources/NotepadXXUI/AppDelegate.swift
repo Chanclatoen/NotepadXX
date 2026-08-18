@@ -86,6 +86,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         windowController.loadUserLanguages()
         windowController.rebuildRecentMenu()
+        windowController.rebuildSessionMenu()
+        windowController.rebuildProjectMenu()
 
         windowController.showWindow(nil)
 
