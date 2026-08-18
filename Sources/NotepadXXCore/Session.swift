@@ -16,12 +16,13 @@ public struct SessionEntry: Codable, Equatable, Sendable {
     public var isDirty: Bool
     public var isReadOnly: Bool
     public var languageName: String?
+    public var paneIndex: Int
 
     public init(
         id: UUID, filePath: String?, untitledName: String, backupFileName: String?,
         selectionLocation: Int = 0, selectionLength: Int = 0, scrollOffset: Double = 0,
         encodingRawValue: UInt, encodingHasBOM: Bool, lineEndingRawValue: String,
-        isDirty: Bool, isReadOnly: Bool, languageName: String? = nil
+        isDirty: Bool, isReadOnly: Bool, languageName: String? = nil, paneIndex: Int = 0
     ) {
         self.id = id
         self.filePath = filePath
@@ -36,6 +37,7 @@ public struct SessionEntry: Codable, Equatable, Sendable {
         self.isDirty = isDirty
         self.isReadOnly = isReadOnly
         self.languageName = languageName
+        self.paneIndex = paneIndex
     }
 }
 
@@ -105,7 +107,8 @@ public final class SessionStore {
                 lineEndingRawValue: document.lineEnding.rawValue,
                 isDirty: document.isDirty,
                 isReadOnly: document.isReadOnly,
-                languageName: document.languageName
+                languageName: document.languageName,
+                paneIndex: document.paneIndex
             ))
         }
 
@@ -163,6 +166,7 @@ public final class SessionStore {
             )
             document.untitledName = entry.untitledName
             document.languageName = entry.languageName
+            document.paneIndex = entry.paneIndex
             documents.append(document)
         }
 

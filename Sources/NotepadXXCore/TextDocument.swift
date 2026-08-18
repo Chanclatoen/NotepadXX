@@ -14,6 +14,9 @@ public final class TextDocument: Identifiable, @unchecked Sendable {
     public var isReadOnly: Bool
     /// Selected syntax language, or nil for plain text. Persisted in the session.
     public var languageName: String?
+    /// Which editor pane shows this document: 0 is the primary view, 1 the
+    /// secondary one created by a split.
+    public var paneIndex: Int = 0
     /// Modification date observed at load/save, used for on-disk change detection.
     public private(set) var lastKnownModification: Date?
 

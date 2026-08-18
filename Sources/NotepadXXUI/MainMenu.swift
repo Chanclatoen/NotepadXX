@@ -149,6 +149,11 @@ public enum MainMenu {
         submenu("View") { menu in
             add(menu, "Word Wrap", #selector(MainWindowController.toggleWordWrapAction(_:)))
             menu.addItem(.separator())
+            add(menu, "Toggle Split View", #selector(MainWindowController.toggleSplitViewAction(_:)))
+            add(menu, "Move to Other View", #selector(MainWindowController.moveToOtherViewAction(_:)))
+            add(menu, "Clone to Other View", #selector(MainWindowController.cloneToOtherViewAction(_:)))
+            add(menu, "Close Split", #selector(MainWindowController.closeSplitAction(_:)))
+            menu.addItem(.separator())
             add(menu, "Function List", #selector(MainWindowController.toggleFunctionListAction(_:)))
             add(menu, "Folder as Workspace…", #selector(MainWindowController.openFolderAsWorkspaceAction(_:)))
             add(menu, "Clipboard History", #selector(MainWindowController.toggleClipboardHistoryAction(_:)))

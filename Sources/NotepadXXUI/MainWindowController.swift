@@ -4,7 +4,17 @@ import NotepadXXEditor
 
 /// The main editing window: tab strip, editor, status bar.
 public final class MainWindowController: NSWindowController {
-    public private(set) var documents: [TextDocument] = []
+    public struct EditorTab {
+        public let document: TextDocument
+        public var pane: Int
+        public init(document: TextDocument, pane: Int = 0) {
+            self.document = document
+            self.pane = pane
+        }
+    }
+
+    public private(set) var tabs: [EditorTab] = []
+    public var documents: [TextDocument] { tabs.map(\.document) }
     public private(set) var activeIndex: Int = 0
 
     private var tabBar: TabBarView!
@@ -17,6 +27,9 @@ public final class MainWindowController: NSWindowController {
     var installedFindPanel: FindPanelController?
     var installedResultsPanel: SearchResultsPanelController?
     var installedColumnEditor: ColumnEditorPanel?
+    var editorSplit: NSSplitView!
+    var secondaryContainer: NSView!
+    private var secondaryActiveIndex = 0
     var dockHost: DockHostView?
     var functionListPanel: FunctionListPanel?
     var folderWorkspacePanel: FolderWorkspacePanel?
@@ -55,7 +68,25 @@ public final class MainWindowController: NSWindowController {
         let host = DockHostView()
         dockHost = host
         installPanels(into: host)
-        editorContainer = host.editorContainer
+
+        // The editor area is a split: the second pane appears only when a
+        // document is moved or cloned into it.
+        editorSplit = NSSplitView()
+        editorSplit.isVertical = true
+        editorSplit.dividerStyle = .thin
+        editorContainer = NSView()
+        secondaryContainer = NSView()
+        editorSplit.addArrangedSubview(editorContainer)
+        editorContainer.widthAnchor.constraint(greaterThanOrEqualToConstant: 200).isActive = true
+        secondaryContainer.widthAnchor.constraint(greaterThanOrEqualToConstant: 200).isActive = true
+        editorSplit.translatesAutoresizingMaskIntoConstraints = false
+        host.editorContainer.addSubview(editorSplit)
+        NSLayoutConstraint.activate([
+            editorSplit.topAnchor.constraint(equalTo: host.editorContainer.topAnchor),
+            editorSplit.leadingAnchor.constraint(equalTo: host.editorContainer.leadingAnchor),
+            editorSplit.trailingAnchor.constraint(equalTo: host.editorContainer.trailingAnchor),
+            editorSplit.bottomAnchor.constraint(equalTo: host.editorContainer.bottomAnchor),
+        ])
         statusBar = StatusBarView()
 
         for subview in [tabBar!, host as NSView, statusBar!] {
@@ -86,7 +117,7 @@ public final class MainWindowController: NSWindowController {
     // MARK: - Document lifecycle
 
     public func adopt(documents restored: [TextDocument], activeIndex index: Int) {
-        documents = restored
+        tabs = restored.map { EditorTab(document: $0, pane: $0.paneIndex) }
         untitledCounter = restored.filter { $0.isUntitled }.count
         activate(index: index)
         refreshTabs()
@@ -97,8 +128,8 @@ public final class MainWindowController: NSWindowController {
         untitledCounter += 1
         let document = TextDocument()
         document.untitledName = "new \(untitledCounter)"
-        documents.append(document)
-        activate(index: documents.count - 1)
+        tabs.append(EditorTab(document: document))
+        activate(index: tabs.count - 1)
         refreshTabs()
         return document
     }
@@ -143,8 +174,12 @@ public final class MainWindowController: NSWindowController {
 
     private func close(index: Int) {
         guard documents.indices.contains(index) else { return }
-        let document = documents.remove(at: index)
-        editors.removeValue(forKey: document.id)
+        let document = tabs.remove(at: index).document
+        // Keep the editor alive if the same document is still open in the other
+        // pane; discarding it would blank that pane.
+        if !tabs.contains(where: { $0.document === document }) {
+            editors.removeValue(forKey: document.id)
+        }
         if documents.isEmpty {
             newDocument()
         } else {
@@ -160,12 +195,48 @@ public final class MainWindowController: NSWindowController {
         refreshPanels()
     }
 
+    /// Shows or hides the second pane and installs its editor.
+    func rebuildPanes() {
+        let secondary = tabs.enumerated().filter { $0.element.pane == 1 }
+        let shouldShow = !secondary.isEmpty
+
+        if shouldShow && secondaryContainer.superview == nil {
+            editorSplit.addArrangedSubview(secondaryContainer)
+            // NSSplitView otherwise hands almost all the width to the new pane,
+            // collapsing the first to just its gutter. Split evenly once laid out.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.editorSplit.arrangedSubviews.count > 1 else { return }
+                self.editorSplit.setPosition(self.editorSplit.bounds.width / 2, ofDividerAt: 0)
+            }
+        } else if !shouldShow && secondaryContainer.superview != nil {
+            editorSplit.removeArrangedSubview(secondaryContainer)
+            secondaryContainer.removeFromSuperview()
+        }
+        guard shouldShow else { return }
+
+        secondaryActiveIndex = min(secondaryActiveIndex, secondary.count - 1)
+        let document = secondary[secondaryActiveIndex].element.document
+        let controller = editorController(for: document)
+
+        secondaryContainer.subviews.forEach { $0.removeFromSuperview() }
+        let editorView = controller.view
+        editorView.translatesAutoresizingMaskIntoConstraints = false
+        secondaryContainer.addSubview(editorView)
+        NSLayoutConstraint.activate([
+            editorView.topAnchor.constraint(equalTo: secondaryContainer.topAnchor),
+            editorView.leadingAnchor.constraint(equalTo: secondaryContainer.leadingAnchor),
+            editorView.trailingAnchor.constraint(equalTo: secondaryContainer.trailingAnchor),
+            editorView.bottomAnchor.constraint(equalTo: secondaryContainer.bottomAnchor),
+        ])
+    }
+
     private func refreshTabs() {
         tabBar.configure(
-            titles: documents.map { $0.displayName },
-            dirtyFlags: documents.map { $0.isDirty },
+            titles: tabs.map { $0.document.displayName + ($0.pane == 1 ? " ⧉" : "") },
+            dirtyFlags: tabs.map { $0.document.isDirty },
             selected: activeIndex
         )
+        rebuildPanes()
         window?.title = documents.indices.contains(activeIndex) ? documents[activeIndex].displayName : "NotepadXX"
     }
 
@@ -191,8 +262,30 @@ public final class MainWindowController: NSWindowController {
 
     /// Adds a document as a new tab and focuses it.
     public func appendDocument(_ document: TextDocument) {
-        documents.append(document)
-        activate(index: documents.count - 1)
+        tabs.append(EditorTab(document: document, pane: document.paneIndex))
+        activate(index: tabs.count - 1)
+        refreshTabs()
+    }
+
+    /// Adds a second tab for an already-open document, in the other pane.
+    func appendClone(of document: TextDocument, inPane pane: Int) {
+        tabs.append(EditorTab(document: document, pane: pane))
+        refreshTabs()
+    }
+
+    /// Replaces the tab list wholesale, clamping the active index.
+    func replaceTabs(_ newTabs: [EditorTab]) {
+        tabs = newTabs
+        activeIndex = min(activeIndex, max(0, tabs.count - 1))
+        if tabs.isEmpty { newDocument() } else { activate(index: activeIndex) }
+        refreshTabs()
+    }
+
+    /// Reassigns the pane of the tab at `index`.
+    func setPane(_ pane: Int, forTabAt index: Int) {
+        guard tabs.indices.contains(index) else { return }
+        tabs[index].pane = pane
+        tabs[index].document.paneIndex = pane
         refreshTabs()
     }
 
@@ -230,9 +323,9 @@ public final class MainWindowController: NSWindowController {
         guard panel.runModal() == .OK else { return }
         for url in panel.urls {
             guard let document = try? TextDocument.load(contentsOf: url) else { continue }
-            documents.append(document)
+            tabs.append(EditorTab(document: document))
         }
-        activate(index: documents.count - 1)
+        activate(index: tabs.count - 1)
         refreshTabs()
     }
 
