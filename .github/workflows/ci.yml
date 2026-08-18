@@ -7,20 +7,36 @@ on:
 
 jobs:
   test:
-    runs-on: macos-15
+    # macos-26 carries Xcode 26.x. An older runner resolves the SwiftLint
+    # build-tool plugin (pulled in transitively by CodeEditTextView) to a
+    # source build, and SwiftPM refuses: "a prebuild command cannot use
+    # executables built from source".
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
-      - name: Show toolchain
-        run: swift --version
+
+      - name: Select the newest Xcode
+        run: |
+          ls /Applications | grep -i '^Xcode' || true
+          latest=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$latest" ]; then sudo xcode-select -s "$latest"; fi
+          xcodebuild -version
+          swift --version
+
       - name: Build and test
         run: ./scripts/check.sh
+
       - name: Build app bundle
         run: ./scripts/make-app.sh
+
       - name: Verify the app launches and renders
         run: |
           ./dist/NotepadXX.app/Contents/MacOS/NotepadXX --screenshot /tmp/ui.png
           test -s /tmp/ui.png || { echo "app produced no window"; exit 1; }
+
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: ui-screenshot
           path: /tmp/ui.png
+          if-no-files-found: warn
