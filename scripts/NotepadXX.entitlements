@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- The hardened runtime is required for notarization. NotepadXX is not
+         sandboxed: a text editor must open arbitrary files the user names on
+         the command line and run external Run-menu commands, neither of which
+         survives the App Sandbox without breaking core behaviour. This is a
+         direct-download build; a Mac App Store build would need a sandboxed
+         variant with those features curtailed. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <false/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <false/>
+</dict>
+</plist>
