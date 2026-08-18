@@ -84,6 +84,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             windowController.applyPreferences(preferences)
         }
 
+        windowController.rebuildRecentMenu()
+
         windowController.showWindow(nil)
 
         // --screenshot <path> renders the window and exits, for CI and for
@@ -115,6 +117,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         for url in urls {
             windowController.openOrFocus(url: url)
         }
+    }
+
+    /// Files changed by other programs are noticed when the user comes back to
+    /// the app, which is when they would look for the change.
+    public func applicationDidBecomeActive(_ notification: Notification) {
+        windowController?.checkForExternalChanges()
     }
 
     /// Never prompt to save. Unsaved buffers are snapshotted and restored — this

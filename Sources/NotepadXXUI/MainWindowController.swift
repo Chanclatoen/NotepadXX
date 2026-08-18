@@ -20,7 +20,7 @@ public final class MainWindowController: NSWindowController {
     var tabBar: TabBarView!
     var statusBar: StatusBarView!
     private var editorContainer: NSView!
-    private var editors: [UUID: EditorViewController] = [:]
+    var editors: [UUID: EditorViewController] = [:]
     private var untitledCounter = 0
     /// Indentation width used by tab/space conversion commands.
     public var tabWidth: Int = 4
@@ -37,6 +37,7 @@ public final class MainWindowController: NSWindowController {
     var hiddenPanelIdentifiers: [String] = []
     /// Bookmarked lines, keyed by document id.
     var bookmarks: [UUID: Bookmarks] = [:]
+    var tabAttributes: [UUID: TabAttributes] = [:]
 
     var editorSplit: NSSplitView!
     var secondaryContainer: NSView!
@@ -50,6 +51,7 @@ public final class MainWindowController: NSWindowController {
     var shortcutMap: ShortcutMap?
     var preferencesWindow: PreferencesWindowController?
     var shortcutWindow: ShortcutMapperWindowController?
+    var recentFiles: RecentFiles?
     var pluginRegistry: PluginRegistry?
     var pluginHost: PluginHost?
     var pluginsAdminWindow: PluginsAdminWindowController?
@@ -74,6 +76,10 @@ public final class MainWindowController: NSWindowController {
             preferencesStore = try? PreferencesStore(directory: support)
             themeStore = try? ThemeStore(directory: support)
             pluginRegistry = try? PluginRegistry(directory: support)
+            recentFiles = RecentFiles(
+                directory: support,
+                limit: preferencesStore?.preferences.recentFilesLimit ?? 15
+            )
         }
     }
 
@@ -87,6 +93,10 @@ public final class MainWindowController: NSWindowController {
         tabBar = TabBarView()
         tabBar.onSelect = { [weak self] index in self?.activate(index: index) }
         tabBar.onClose = { [weak self] index in self?.close(index: index) }
+        tabBar.onReorder = { [weak self] from, to in self?.moveTab(from: from, to: to) }
+        tabBar.onContextMenu = { [weak self] index, point in
+            self?.showTabContextMenu(forTabAt: index, at: point)
+        }
 
         let host = DockHostView()
         dockHost = host
@@ -132,6 +142,20 @@ public final class MainWindowController: NSWindowController {
             statusBar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
             statusBar.bottomAnchor.constraint(equalTo: content.bottomAnchor),
             statusBar.heightAnchor.constraint(equalToConstant: 22),
+        ])
+
+        // Dropping files onto the window opens them.
+        let dropView = FileDropView()
+        dropView.onDrop = { [weak self] urls in
+            for url in urls { self?.openOrFocus(url: url) }
+        }
+        dropView.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(dropView, positioned: .below, relativeTo: nil)
+        NSLayoutConstraint.activate([
+            dropView.topAnchor.constraint(equalTo: content.topAnchor),
+            dropView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            dropView.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            dropView.bottomAnchor.constraint(equalTo: content.bottomAnchor),
         ])
 
         window.contentView = content
@@ -257,7 +281,9 @@ public final class MainWindowController: NSWindowController {
         tabBar.configure(
             titles: tabs.map { $0.document.displayName + ($0.pane == 1 ? " ⧉" : "") },
             dirtyFlags: tabs.map { $0.document.isDirty },
-            selected: activeIndex
+            selected: activeIndex,
+            pinned: tabs.map { attributes(for: $0.document).isPinned },
+            colours: tabs.map { colour(for: attributes(for: $0.document)) }
         )
         rebuildPanes()
         window?.title = documents.indices.contains(activeIndex) ? documents[activeIndex].displayName : "NotepadXX"
@@ -308,6 +334,13 @@ public final class MainWindowController: NSWindowController {
             .filter { dockHost?.isVisible($0) == true }
     }
 
+    /// Sets the tab list without re-activating, for reordering.
+    func setTabs(_ newTabs: [EditorTab]) {
+        tabs = newTabs
+        activeIndex = min(activeIndex, max(0, tabs.count - 1))
+        refreshTabs()
+    }
+
     /// Replaces the tab list wholesale, clamping the active index.
     func replaceTabs(_ newTabs: [EditorTab]) {
         tabs = newTabs
@@ -344,6 +377,7 @@ public final class MainWindowController: NSWindowController {
         }
         guard let document = try? TextDocument.load(contentsOf: url) else { return false }
         appendDocument(document)
+        noteRecentlyOpened(url)
         return true
     }
 

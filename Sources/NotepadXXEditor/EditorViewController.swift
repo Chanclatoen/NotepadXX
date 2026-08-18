@@ -234,6 +234,13 @@ public final class EditorViewController: NSViewController {
 
     public var fontSize: CGFloat { baseFont.pointSize }
 
+    /// Read-only tabs reject edits, matching Notepad++'s per-tab read-only flag
+    /// (which is independent of the file's permissions on disk).
+    public var isEditable: Bool {
+        get { textView.isEditable }
+        set { textView.isEditable = newValue }
+    }
+
     /// The 0-based line range currently on screen, for the Document Map.
     public func visibleLineRange() -> ClosedRange<Int> {
         guard let highlighter else { return 0...0 }

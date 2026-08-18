@@ -139,6 +139,31 @@ public final class TextDocument: Identifiable, @unchecked Sendable {
 
     public func markClean() { isDirty = false }
 
+    /// Points the document at a new path after a rename or move, without
+    /// touching its contents or dirty state.
+    public func relocate(to url: URL) {
+        fileURL = url
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        lastKnownModification = attributes?[.modificationDate] as? Date
+    }
+
+    /// Takes on another document's contents, used when reloading from disk.
+    public func adoptContents(of other: TextDocument) {
+        text = other.text
+        encoding = other.encoding
+        lineEnding = other.lineEnding
+        lastKnownModification = other.lastKnownModification
+        isDirty = false
+    }
+
+    /// Accepts the current on-disk revision without reloading, so the user is
+    /// not asked about the same external change again.
+    public func acceptOnDiskRevision() {
+        guard let url = fileURL,
+              let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { return }
+        lastKnownModification = attributes[.modificationDate] as? Date
+    }
+
     /// Marks the document as needing a save without altering `text` — used by
     /// commands that change how bytes are written (encoding, line endings).
     public func markDirty() { isDirty = true }
