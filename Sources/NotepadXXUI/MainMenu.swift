@@ -175,6 +175,10 @@ public enum MainMenu {
             add(menu, "Always on Top", #selector(MainWindowController.toggleAlwaysOnTopAction(_:)))
             add(menu, "Document Map", #selector(MainWindowController.toggleDocumentMapAction(_:)))
             add(menu, "Change History Margin", #selector(MainWindowController.toggleChangeHistoryMarginAction(_:)))
+            menu.addItem(.separator())
+            add(menu, "Toggle Fold at Caret", #selector(MainWindowController.toggleFoldAtCaretAction(_:)))
+            add(menu, "Fold All", #selector(MainWindowController.foldAllAction(_:)))
+            add(menu, "Unfold All", #selector(MainWindowController.unfoldAllAction(_:)))
 
             let tabLayout = NSMenuItem(title: "Tab Bar Layout", action: nil, keyEquivalent: "")
             let tabLayoutMenu = NSMenu(title: "Tab Bar Layout")

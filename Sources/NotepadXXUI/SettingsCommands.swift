@@ -47,6 +47,12 @@ extension MainWindowController {
             editor.gutterView?.showChangeHistory = preferences.showChangeHistoryMargin
             editor.edgeColumn = preferences.edgeColumn
             editor.clickableURLs = preferences.clickableURLs
+            editor.autoCompleteEnabled = preferences.autoCompletionEnabled
+            editor.autoCompleteFromWords = preferences.autoCompletionFromWords
+            editor.autoCompleteFromKeywords = preferences.autoCompletionFromKeywords
+            editor.autoCompleteMinimumCharacters = preferences.autoCompletionMinimumCharacters
+            editor.pathCompletionEnabled = preferences.pathCompletion
+            editor.showCallTips = preferences.showCallTips
             editor.gutterView?.needsDisplay = true
             if let theme = themeStore?.theme(named: preferences.themeName) {
                 editor.applyTheme(theme)

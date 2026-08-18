@@ -75,6 +75,22 @@ public final class EditorViewController: NSViewController {
         }
     }
     private var indentGuideView: IndentGuideView?
+
+    // MARK: - Autocomplete
+    public let completionPopup = CompletionPopup()
+    public var autoCompleteEnabled = true
+    public var autoCompleteMinimumCharacters = 3
+    public var autoCompleteFromWords = true
+    public var autoCompleteFromKeywords = true
+    public var pathCompletionEnabled = true
+    public var showCallTips = true
+    /// API entries for the current language, supplied by the window controller.
+    public var completionEntries: [CompletionEntry] = []
+
+    /// Reports every text insertion so a macro can record it.
+    public var onTextInserted: ((String) -> Void)?
+    /// Called when a fold box in the gutter is clicked.
+    public var onToggleFold: ((Int) -> Void)?
     /// Lines changed since load/save, drawn in the gutter.
     public private(set) var changeHistory = ChangeHistory()
     private var edgeGuideView: EdgeGuideView?
@@ -106,6 +122,9 @@ public final class EditorViewController: NSViewController {
 
         gutterView = GutterView()
         gutterView.textView = textView
+        gutterView.onToggleFold = { [weak self] line in self?.onToggleFold?(line) }
+
+        completionPopup.onCommit = { [weak self] text in self?.insertCompletion(text) }
 
         let container = NSView()
         for subview in [gutterView!, scrollView!] {
@@ -286,8 +305,59 @@ public final class EditorViewController: NSViewController {
         set { textView.isEditable = newValue }
     }
 
+    /// Shows or updates the completion list as the user types.
+    ///
+    /// Only plain typing triggers it — a paste or a programmatic edit should
+    /// not pop a list open, which is why the inserted string is checked.
+    func updateCompletions(afterInserting inserted: String) {
+        guard autoCompleteEnabled else { completionPopup.hide(); return }
+        guard inserted.count == 1, let character = inserted.first else {
+            completionPopup.hide()
+            return
+        }
+
+        let location = selectedRange.location
+        // Path completion takes over inside a path-like token.
+        if pathCompletionEnabled, character == "/" || character == "~" {
+            presentCompletions(AutoCompletion.pathSuggestions(in: textView.string, at: location))
+            return
+        }
+        guard character.isLetter || character.isNumber || character == "_" else {
+            completionPopup.hide()
+            return
+        }
+
+        let prefix = AutoCompletion.currentPrefix(in: textView.string, at: location)
+        guard prefix.count >= autoCompleteMinimumCharacters else {
+            completionPopup.hide()
+            return
+        }
+        presentCompletions(AutoCompletion.suggestions(
+            in: textView.string, at: location, language: language,
+            includeWords: autoCompleteFromWords, includeKeywords: autoCompleteFromKeywords,
+            apiEntries: showCallTips ? completionEntries : []
+        ))
+    }
+
+    private func presentCompletions(_ items: [CompletionItem]) {
+        guard !items.isEmpty else { completionPopup.hide(); return }
+        let caret = textView.layoutManager.rectForOffset(selectedRange.location)
+            ?? NSRect(x: 0, y: 0, width: 1, height: 16)
+        completionPopup.show(items: items, below: caret, in: textView)
+    }
+
+    /// Replaces the partially typed word with the chosen completion.
+    func insertCompletion(_ text: String) {
+        let location = selectedRange.location
+        let prefix = AutoCompletion.currentPrefix(in: textView.string, at: location)
+        let start = location - (prefix as NSString).length
+        guard start >= 0 else { return }
+        textView.replaceCharacters(in: NSRange(location: start, length: (prefix as NSString).length),
+                                   with: text)
+    }
+
     /// Recomputes fold regions for the gutter's fold boxes.
-    func refreshFoldMarkers() {
+    public func refreshFoldMarkers() {
         guard let language else {
             gutterView?.foldStartLines = []
             return
@@ -514,6 +584,8 @@ extension EditorViewController: @preconcurrency TextViewDelegate {
         }
         updateGutterWidth()
         refreshFoldMarkers()
+        if !string.isEmpty { onTextInserted?(string) }
+        updateCompletions(afterInserting: string)
         onTextChange?(textView.string)
     }
 

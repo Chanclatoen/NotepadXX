@@ -58,6 +58,9 @@ public final class MainWindowController: NSWindowController {
     var preferencesWindow: PreferencesWindowController?
     var shortcutWindow: ShortcutMapperWindowController?
     var recentFiles: RecentFiles?
+    var completionData: CompletionDataStore?
+    /// Folded regions per document, keyed by the fold's first line.
+    var collapsedFolds: [UUID: Set<Int>] = [:]
     var namedSessions: NamedSessionStore?
     var projectStore: ProjectStore?
     var activeProjectName: String?
@@ -88,6 +91,7 @@ public final class MainWindowController: NSWindowController {
             pluginRegistry = try? PluginRegistry(directory: support)
             namedSessions = try? NamedSessionStore(directory: support)
             projectStore = try? ProjectStore(directory: support)
+            completionData = try? CompletionDataStore(directory: support)
             recentFiles = RecentFiles(
                 directory: support,
                 limit: preferencesStore?.preferences.recentFilesLimit ?? 15
@@ -218,6 +222,16 @@ public final class MainWindowController: NSWindowController {
             self?.refreshStatus()
         }
         controller.onSelectionChange = { [weak self] _ in self?.refreshStatus() }
+        // Typing is recorded while a macro is being captured. Without this the
+        // recorder exists but never sees anything, so playback does nothing.
+        controller.onTextInserted = { [weak self] text in
+            guard let self, self.macroRecorder.isRecording else { return }
+            self.macroRecorder.record(.insertText(text))
+        }
+        controller.onToggleFold = { [weak self] line in self?.toggleFold(atLine: line) }
+        controller.completionEntries = completionData?.entries(
+            forLanguage: document.languageName
+        ) ?? []
         editors[document.id] = controller
         return controller
     }
@@ -431,6 +445,9 @@ public final class MainWindowController: NSWindowController {
         guard documents.indices.contains(activeIndex) else { return }
         let document = documents[activeIndex]
         if document.isUntitled { saveDocumentAsAction(sender); return }
+        // A folded region is physically absent from the buffer, so restore
+        // every fold before writing or the file would lose those lines.
+        unfoldAll()
         try? document.save()
         currentEditor?.documentDidSave()
         refreshTabs()
