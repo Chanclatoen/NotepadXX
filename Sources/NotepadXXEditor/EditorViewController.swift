@@ -14,6 +14,8 @@ import NotepadXXCore
 public final class EditorViewController: NSViewController {
     public private(set) var textView: TextView!
     public private(set) var scrollView: NSScrollView!
+    public private(set) var gutterView: GutterView!
+    private var gutterWidthConstraint: NSLayoutConstraint?
 
     /// Called whenever the buffer changes, so the document and status bar update.
     public var onTextChange: ((String) -> Void)?
@@ -47,7 +49,52 @@ public final class EditorViewController: NSViewController {
         textView = TextView(string: "", wrapLines: wrapLines)
         textView.delegate = self
         scrollView.documentView = textView
-        view = scrollView
+
+        // The gutter is a sibling pinned to the left of the scroll view rather
+        // than an NSRulerView: the ruler machinery assumes an NSTextView-shaped
+        // client and stops CodeEditTextView from drawing.
+        gutterView = GutterView()
+        gutterView.textView = textView
+
+        let container = NSView()
+        for subview in [gutterView!, scrollView!] {
+            subview.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(subview)
+        }
+        let widthConstraint = gutterView.widthAnchor.constraint(equalToConstant: 44)
+        gutterWidthConstraint = widthConstraint
+        NSLayoutConstraint.activate([
+            gutterView.topAnchor.constraint(equalTo: container.topAnchor),
+            gutterView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            gutterView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            widthConstraint,
+
+            scrollView.topAnchor.constraint(equalTo: container.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: gutterView.trailingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+        ])
+
+        // Redraw line numbers as the text scrolls under them.
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(viewportChanged),
+            name: NSView.boundsDidChangeNotification, object: scrollView.contentView
+        )
+        view = container
+    }
+
+    @objc private func viewportChanged() {
+        gutterView?.needsDisplay = true
+        highlightVisibleRegion()
+    }
+
+    /// Resizes the gutter when the line count gains a digit.
+    private func updateGutterWidth() {
+        guard let gutterView, let constraint = gutterWidthConstraint else { return }
+        let width = gutterView.requiredWidth()
+        if abs(constraint.constant - width) > 0.5 { constraint.constant = width }
+        gutterView.needsDisplay = true
     }
 
     /// Replaces the buffer. Safe for very large documents.
@@ -61,6 +108,7 @@ public final class EditorViewController: NSViewController {
         textView.setText(text)
         highlighter?.setText(text)
         highlightVisibleRegion()
+        updateGutterWidth()
     }
 
     /// Sets the language and re-highlights. Passing nil clears highlighting.
@@ -185,22 +233,56 @@ public final class EditorViewController: NSViewController {
         textView.scrollSelectionToVisible()
     }
 
-    /// 1-based line and column for the caret, for the status bar.
-    public func caretPosition() -> (line: Int, column: Int) {
-        let location = selectedRange.location
+    /// Moves the caret to a 1-based column on a 1-based line, clamped to the
+    /// line's length so an out-of-range column lands at the end rather than
+    /// spilling onto the next line.
+    public func moveToColumn(_ column: Int, onLine line: Int) {
+        goToLine(line)
         let content = textView.string as NSString
-        guard location <= content.length else { return (1, 1) }
+        let lineStart = selectedRange.location
+        var lineEnd = lineStart
+        while lineEnd < content.length,
+              content.substring(with: NSRange(location: lineEnd, length: 1)) != "\n" {
+            lineEnd += 1
+        }
+        let target = min(lineStart + max(0, column - 1), lineEnd)
+        selectedRange = NSRange(location: target, length: 0)
+    }
+
+    /// 1-based line and column for the caret, for the status bar.
+    ///
+    /// Counts line terminators before the caret rather than enumerating
+    /// substrings: enumeration reports a trailing partial line even when no
+    /// newline was crossed, which put the caret one line too far whenever it sat
+    /// at the end of a line.
+    public func caretPosition() -> (line: Int, column: Int) {
+        let content = textView.string as NSString
+        let location = min(max(0, selectedRange.location), content.length)
+        guard location > 0 else { return (1, 1) }
+
         var line = 1
         var lineStart = 0
         content.enumerateSubstrings(
             in: NSRange(location: 0, length: location),
             options: [.byLines, .substringNotRequired]
         ) { _, _, enclosing, _ in
-            line += 1
-            lineStart = NSMaxRange(enclosing)
+            let end = NSMaxRange(enclosing)
+            // Only count a line when the enclosing range actually consumed a
+            // terminator, i.e. it extends past the substring itself.
+            if end <= location, end > lineStart, self.endsWithNewline(content, enclosing) {
+                line += 1
+                lineStart = end
+            }
         }
         return (line, location - lineStart + 1)
     }
+
+    private func endsWithNewline(_ content: NSString, _ range: NSRange) -> Bool {
+        guard range.length > 0, NSMaxRange(range) <= content.length else { return false }
+        let last = content.substring(with: NSRange(location: NSMaxRange(range) - 1, length: 1))
+        return last == "\n" || last == "\r"
+    }
+
 }
 
 extension EditorViewController: @preconcurrency TextViewDelegate {
@@ -210,10 +292,15 @@ extension EditorViewController: @preconcurrency TextViewDelegate {
             highlighter.textDidChange(textView.string, editedLine: editedLine)
             highlightVisibleRegion()
         }
+        updateGutterWidth()
         onTextChange?(textView.string)
     }
 
     public func textViewDidChangeSelection(_ textView: TextView) {
+        // Keep the current-line highlight in the gutter in step with the caret.
+        if let highlighter {
+            gutterView?.currentLine = highlighter.line(containing: selectedRange.location)
+        }
         onSelectionChange?(selectedRange)
     }
 }

@@ -130,13 +130,7 @@ extension MainWindowController {
 
     /// Focuses the tab for `url` (opening it if needed) and scrolls to `line`.
     func reveal(url: URL, line: Int) {
-        if let index = documents.firstIndex(where: { $0.fileURL?.standardizedFileURL == url.standardizedFileURL }) {
-            selectTab(at: index)
-        } else if let document = try? TextDocument.load(contentsOf: url) {
-            appendDocument(document)
-        } else {
-            return
-        }
+        guard openOrFocus(url: url) else { return }
         currentEditor?.goToLine(line)
     }
 

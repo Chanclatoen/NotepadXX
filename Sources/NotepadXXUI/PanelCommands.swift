@@ -18,14 +18,7 @@ extension MainWindowController {
 
         let workspace = FolderWorkspacePanel()
         workspace.onOpenFile = { [weak self] url in
-            guard let self else { return }
-            if let index = self.documents.firstIndex(where: {
-                $0.fileURL?.standardizedFileURL == url.standardizedFileURL
-            }) {
-                self.selectTab(at: index)
-            } else if let document = try? TextDocument.load(contentsOf: url) {
-                self.appendDocument(document)
-            }
+            self?.openOrFocus(url: url)
         }
 
         let clipboard = ClipboardHistoryPanel()

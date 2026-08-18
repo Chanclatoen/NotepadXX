@@ -196,6 +196,29 @@ public final class MainWindowController: NSWindowController {
         refreshTabs()
     }
 
+    /// The tab already showing `url`, if any. Paths are resolved through
+    /// symlinks so /var and /private/var forms of the same file match.
+    public func indexOfDocument(for url: URL) -> Int? {
+        let target = url.resolvingSymlinksInPath().standardizedFileURL
+        return documents.firstIndex {
+            $0.fileURL?.resolvingSymlinksInPath().standardizedFileURL == target
+        }
+    }
+
+    /// Focuses the tab for `url`, opening it only if it is not already open.
+    /// Opening the same file twice would give two tabs editing one file, where
+    /// saving one silently discards the other's changes.
+    @discardableResult
+    public func openOrFocus(url: URL) -> Bool {
+        if let index = indexOfDocument(for: url) {
+            selectTab(at: index)
+            return true
+        }
+        guard let document = try? TextDocument.load(contentsOf: url) else { return false }
+        appendDocument(document)
+        return true
+    }
+
     // MARK: - Menu actions
 
     @objc public func newDocumentAction(_ sender: Any?) { newDocument() }

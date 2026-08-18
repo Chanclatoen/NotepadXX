@@ -11,20 +11,53 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenu.build()
 
+        let options = CommandLineOptions.parse(CommandLine.arguments)
         sessionStore = try? SessionStore(directory: try! SessionStore.defaultDirectory())
         windowController = MainWindowController()
 
         // Restore the previous session before showing the window, so the user
         // never sees an empty editor flash on launch.
-        let restored = sessionStore?.restoreDocuments()
+        let restored = options.noSession ? nil : sessionStore?.restoreDocuments()
         let documents = restored?.documents ?? []
-        if documents.isEmpty {
-            windowController.newDocument()
-        } else {
+        if !documents.isEmpty {
             windowController.adopt(documents: documents, activeIndex: restored?.activeIndex ?? 0)
         }
 
+        // Files named on the command line open after the restored session, so a
+        // requested file is what ends up focused.
+        var openedFromCommandLine = false
+        for request in options.files {
+            let url = URL(fileURLWithPath: (request.path as NSString).expandingTildeInPath)
+            guard windowController.openOrFocus(url: url) else { continue }
+            if options.readOnly, windowController.documents.indices.contains(windowController.activeIndex) {
+                windowController.documents[windowController.activeIndex].isReadOnly = true
+            }
+            if let line = request.line {
+                windowController.currentEditor?.goToLine(line)
+                if let column = request.column {
+                    windowController.currentEditor?.moveToColumn(column, onLine: line)
+                }
+            }
+            openedFromCommandLine = true
+        }
+
+        if documents.isEmpty && !openedFromCommandLine {
+            windowController.newDocument()
+        }
+
         windowController.showWindow(nil)
+
+        // --screenshot <path> renders the window and exits, for CI and for
+        // verifying the UI where screen capture is unavailable.
+        if let path = options.screenshotPath {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                if let window = self.windowController.window {
+                    WindowCapture.writePNG(of: window, to: path)
+                }
+                NSApp.terminate(nil)
+            }
+            return
+        }
 
         // Periodic snapshot so an abrupt termination loses at most a few seconds.
         autosaveTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
@@ -34,6 +67,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationWillTerminate(_ notification: Notification) {
         persistSession()
+    }
+
+    public func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            windowController.openOrFocus(url: url)
+        }
     }
 
     /// Never prompt to save. Unsaved buffers are snapshotted and restored — this

@@ -11,6 +11,7 @@ final class StatusBarView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
+        layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         let stack = NSStackView(views: [lengthField, positionField, lineEndingField, encodingField])
         stack.orientation = .horizontal
         stack.spacing = 18
@@ -29,7 +30,7 @@ final class StatusBarView: NSView {
     private static func makeLabel() -> NSTextField {
         let field = NSTextField(labelWithString: "")
         field.font = .monospacedDigitSystemFont(ofSize: 10, weight: .regular)
-        field.textColor = .secondaryLabelColor
+        field.textColor = .labelColor
         return field
     }
 
