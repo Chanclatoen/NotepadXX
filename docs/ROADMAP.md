@@ -53,17 +53,15 @@ in `docs/parity/` (~884 catalogued commands).
 - [x] Notarization pipeline written; every step validated except the
       notarytool call, which needs credentials (see below)
 
+**Editing and views (complete)**
+- [x] Change-history margin with two-tier tracking and navigation
+- [x] Edge guide, clickable URLs
+- [x] Docked project panel, vertical and multi-line tab layouts, floating panels
+
 ## Remaining
 
-**Editing**
-- [ ] Change-history margin (the gutter draws it; nothing populates it yet)
-- [ ] Edge-guide rendering, clickable URLs
-- [ ] Notepad++'s remaining ~22 languages, and per-language autocomplete data
-
-**Views**
-- [ ] Project *panel* (projects work from the File menu; there is no docked tree)
-- [ ] Vertical and multi-line tab bar layouts
-- [ ] Floating/undockable panels (they dock, but cannot tear off)
+**Languages**
+- [ ] Notepad++'s last ~22 lexers, and per-language autocomplete data files
 
 **Distribution**
 - [ ] Notarized DMG — **blocked**: needs a Developer ID Application
