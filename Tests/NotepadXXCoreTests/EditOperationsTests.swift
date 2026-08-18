@@ -66,8 +66,11 @@ final class LineOperationsTests: XCTestCase {
         XCTAssertEqual(LineOperations.duplicate("a\nb\n", range: 0...99), "a\nb\na\nb\n")
     }
 
+    /// Scintilla's SCI_LINESJOIN inserts a space where the boundary has none,
+    /// so joining "a" and "b" gives "a b". This test previously asserted "ab",
+    /// which encoded plain concatenation and did not match Notepad++.
     func testJoinLines() {
-        XCTAssertEqual(LineOperations.joinLines("a\nb\nc\n", range: 0...1), "ab\nc\n")
+        XCTAssertEqual(LineOperations.joinLines("a\nb\nc\n", range: 0...1), "a b\nc\n")
     }
 
     func testDuplicateRemoval() {

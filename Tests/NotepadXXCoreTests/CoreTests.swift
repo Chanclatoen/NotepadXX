@@ -165,3 +165,26 @@ final class TextDocumentTests: XCTestCase {
         XCTAssertTrue(document.hasChangedOnDisk())
     }
 }
+
+final class JoinLinesTests: XCTestCase {
+    /// Scintilla's SCI_LINESJOIN, which Notepad++ uses, inserts a space where
+    /// one is not already present. Plain concatenation runs words together.
+    func testJoinInsertsASpaceBetweenWords() {
+        XCTAssertEqual(LineOperations.joinLines("a\nb\nc\n", range: 0...2), "a b c\n")
+    }
+
+    func testJoinDoesNotDoubleAnExistingSpace() {
+        XCTAssertEqual(LineOperations.joinLines("a \nb\n", range: 0...1), "a b\n")
+        XCTAssertEqual(LineOperations.joinLines("a\n b\n", range: 0...1), "a b\n")
+    }
+
+    /// An empty line contributes no text, but the surviving boundary between
+    /// the words either side still needs its separating space.
+    func testJoinAcrossAnEmptyLineStillSeparatesTheWords() {
+        XCTAssertEqual(LineOperations.joinLines("a\n\nb\n", range: 0...2), "a b\n")
+    }
+
+    func testJoiningASingleLineIsANoOp() {
+        XCTAssertEqual(LineOperations.joinLines("a\nb\n", range: 0...0), "a\nb\n")
+    }
+}

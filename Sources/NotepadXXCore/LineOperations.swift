@@ -70,11 +70,26 @@ public enum LineOperations {
     }
 
     /// Joins the given lines into one, as Edit > Line Operations > Join Lines.
+    /// Joins lines, inserting a single space at any boundary that does not
+    /// already have whitespace on one side.
+    ///
+    /// This matches Scintilla's SCI_LINESJOIN, which is what Notepad++ uses:
+    /// plain concatenation would run the last word of one line into the first
+    /// word of the next.
     public static func joinLines(_ text: String, range: ClosedRange<Int>) -> String {
         transform(text) { lines in
             guard let clamped = clamp(range, to: lines), clamped.count > 1 else { return lines }
             var result = lines
-            let merged = lines[clamped].joined()
+            var merged = ""
+            for line in lines[clamped] {
+                if merged.isEmpty {
+                    merged = line
+                    continue
+                }
+                let needsSpace = !(merged.last?.isWhitespace ?? true)
+                    && !(line.first?.isWhitespace ?? true)
+                merged += (needsSpace ? " " : "") + line
+            }
             result.replaceSubrange(clamped, with: [merged])
             return result
         }
@@ -187,6 +202,27 @@ public enum LineOperations {
 
     /// Expands tabs to the next tab stop, which is column-aware rather than a
     /// blind replace — a tab mid-line advances to the stop, not by `width`.
+    /// Converts runs of spaces to tabs. `leadingOnly` matches Notepad++'s
+    /// "Space to TAB (Leading)", which is the safer of the two: converting
+    /// spaces inside a string literal or aligned comment would change meaning.
+    public static func spacesToTabs(_ text: String, width: Int, leadingOnly: Bool = false) -> String {
+        guard width > 0 else { return text }
+        let run = String(repeating: " ", count: width)
+        let (lines, trailing) = split(text)
+
+        let converted = lines.map { line -> String in
+            if leadingOnly {
+                let body = line.drop { $0 == " " }
+                let indent = line.count - body.count
+                let tabs = String(repeating: "\t", count: indent / width)
+                let remainder = String(repeating: " ", count: indent % width)
+                return tabs + remainder + body
+            }
+            return line.replacingOccurrences(of: run, with: "\t")
+        }
+        return join(converted, hadTrailingNewline: trailing)
+    }
+
     public static func tabsToSpaces(_ text: String, width: Int) -> String {
         precondition(width > 0, "tab width must be positive")
         return transform(text) { $0.map { line in

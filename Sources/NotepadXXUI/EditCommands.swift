@@ -100,6 +100,12 @@ extension MainWindowController {
     @objc public func removeBlankLinesAction(_ sender: Any?) {
         applyToDocument { LineOperations.removeEmptyLines($0, keepingWhitespaceOnly: false) }
     }
+    /// Notepad++'s "Space to TAB (All)". The leading-only variant already
+    /// exists below; this converts runs anywhere on the line.
+    @objc public func spacesToTabsAction(_ sender: Any?) {
+        applyToDocument { LineOperations.spacesToTabs($0, width: tabWidth) }
+    }
+
     @objc public func tabsToSpacesAction(_ sender: Any?) {
         applyToDocument { LineOperations.tabsToSpaces($0, width: tabWidth) }
     }
