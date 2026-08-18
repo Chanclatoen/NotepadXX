@@ -37,10 +37,17 @@ in `docs/parity/` (~884 catalogued commands).
       Character Panel
 - [x] Full screen, distraction-free, always-on-top equivalent
 
+**Files and tabs**
+- [x] Recent files, print, rename/move/trash, reload from disk, copy path
+- [x] Tab reorder by drag, pin, colour, sort, close variants, read-only
+- [x] File-change detection, drag-and-drop of files onto the window
+
 **Automation and customisation**
 - [x] Macros (record/playback/N-times/until-EOF), Run menu with variables
 - [x] Preferences (10 pages), themes, Shortcut Mapper with conflict detection
 - [x] Plugin system (JavaScriptCore) + Plugins Admin
+- [x] 73 built-in languages, UDL authoring GUI
+- [x] Projects and named sessions
 
 **Distribution**
 - [x] Notarization pipeline written; every step validated except the
@@ -48,22 +55,15 @@ in `docs/parity/` (~884 catalogued commands).
 
 ## Remaining
 
-**Files/Tabs**
-- [ ] Tab reorder by drag, pin/lock, per-tab colour, sort tabs
-- [ ] Recent files menu, print, drag-and-drop of files onto the window
-- [ ] File-change detection UI (the model exists; the prompt does not)
-- [ ] Rename / move / delete from the File menu
-
 **Editing**
-- [ ] Multi-caret editing beyond what the engine provides by default
-- [ ] Change-history margin, edge guide rendering, clickable URLs
+- [ ] Change-history margin (the gutter draws it; nothing populates it yet)
+- [ ] Edge-guide rendering, clickable URLs
+- [ ] Notepad++'s remaining ~22 languages, and per-language autocomplete data
 
-**Languages**
-- [ ] The remaining ~70 built-in languages (data entries, not new code)
-- [ ] UDL authoring GUI (import/export and the lexer engine already work)
-
-**Views/Sessions**
-- [ ] Project panels and project files, named sessions
+**Views**
+- [ ] Project *panel* (projects work from the File menu; there is no docked tree)
+- [ ] Vertical and multi-line tab bar layouts
+- [ ] Floating/undockable panels (they dock, but cannot tear off)
 
 **Distribution**
 - [ ] Notarized DMG — **blocked**: needs a Developer ID Application
