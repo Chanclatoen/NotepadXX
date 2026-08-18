@@ -20,6 +20,10 @@ public final class MainWindowController: NSWindowController {
     var dockHost: DockHostView?
     var functionListPanel: FunctionListPanel?
     var folderWorkspacePanel: FolderWorkspacePanel?
+    let macroRecorder = MacroRecorder()
+    var lastRecordedSteps: [MacroStep] = []
+    var macroStore: MacroStore?
+    var runCommandStore: RunCommandStore?
 
     public init() {
         let window = NSWindow(
@@ -31,6 +35,10 @@ public final class MainWindowController: NSWindowController {
         window.setFrameAutosaveName("NotepadXXMainWindow")
         super.init(window: window)
         buildLayout()
+        if let support = try? SessionStore.defaultDirectory() {
+            macroStore = try? MacroStore(directory: support)
+            runCommandStore = try? RunCommandStore(directory: support)
+        }
     }
 
     @available(*, unavailable)

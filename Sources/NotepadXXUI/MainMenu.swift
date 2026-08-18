@@ -18,6 +18,8 @@ public enum MainMenu {
         root.addItem(viewMenu())
         root.addItem(encodingMenu())
         root.addItem(languageMenu())
+        root.addItem(macroMenu())
+        root.addItem(runMenu())
         root.addItem(windowMenu())
         return root
     }
@@ -173,6 +175,22 @@ public enum MainMenu {
         let item = NSMenuItem(title: "Language", action: nil, keyEquivalent: "")
         item.submenu = MainWindowController.buildLanguageMenu()
         return item
+    }
+
+    private static func macroMenu() -> NSMenuItem {
+        submenu("Macro") { menu in
+            add(menu, "Start/Stop Recording", #selector(MainWindowController.toggleMacroRecordingAction(_:)))
+            add(menu, "Playback", #selector(MainWindowController.playbackMacroAction(_:)))
+            add(menu, "Run a Macro Multiple Times…", #selector(MainWindowController.runMacroMultipleTimesAction(_:)))
+            menu.addItem(.separator())
+            add(menu, "Save Current Recorded Macro…", #selector(MainWindowController.saveCurrentMacroAction(_:)))
+        }
+    }
+
+    private static func runMenu() -> NSMenuItem {
+        submenu("Run") { menu in
+            add(menu, "Run…", #selector(MainWindowController.runCommandAction(_:)), "r", [.command, .shift])
+        }
     }
 
     private static func windowMenu() -> NSMenuItem {
