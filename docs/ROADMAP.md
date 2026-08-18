@@ -1,70 +1,83 @@
 # Roadmap
 
 Ordered by what makes NotepadXX trustworthy first, then by what makes it
-Notepad++ rather than a generic editor.
+Notepad++ rather than a generic editor. Parity is tracked against the matrices
+in `docs/parity/` (~884 catalogued commands).
 
-## v0.1 — Foundation (done)
+## Done
 
-- [x] Tabs, open/save/save as/save all/close
-- [x] Session restore with crash-safe unsaved buffers
+**Foundation**
+- [x] Tabs, open/save/save as/save all/close, CLI open at `file:line:column`
+- [x] Session restore with crash-safe unsaved buffers (verified against `kill -9`)
 - [x] Encoding detection, BOM handling, convert-to vs encode-in
-- [x] Line ending detection/conversion
-- [x] Status bar
-- [x] Large-file performance validated (100MB in 401ms)
+- [x] Line ending detection/conversion, status bar
+- [x] Large-file performance: 100MB / 927k lines opens in 401ms
 
-## v0.2 — The differentiators
+**Editing**
+- [x] Line operations, case conversions, blank operations, tab/space conversion
+- [x] Column Editor (text and incrementing numbers, dec/oct/hex/bin)
+- [x] Bookmarks with gutter markers, navigation, cut/copy/remove
+- [x] Brace matching (comment- and string-aware), smart highlight
+- [x] Show whitespace / tabs / EOL, zoom, word wrap, line numbers
 
-These are the features people say they cannot find on macOS.
+**Search**
+- [x] Normal/Extended/Regex, case, whole word, wrap, backward, in-selection
+- [x] Find/Replace panel, clickable Search Results, recursive Find in Files
 
-- [ ] Rectangular/column selection + Column Editor dialog
-- [ ] Multi-cursor editing
-- [ ] Find/Replace dialog: Normal/Extended/Regex modes, match case, whole word,
-      wrap, in-selection, backward
-- [ ] Find in Files with a clickable, foldable Search Results panel
-- [ ] Bookmarks and the bookmark margin
-- [ ] Go to Line/Offset
+**Languages**
+- [x] Keyword/delimiter lexer, 24 built-in languages, extension + shebang detection
+- [x] Incremental viewport highlighting (sub-50ms on a 200k-line file)
+- [x] Folding (brace and indentation), Function List
+- [x] Autocomplete (words/keywords/functions/paths), call tips
+- [x] UDL import/export in the real Notepad++ XML format
 
-## v0.3 — Language support
-
-- [ ] tree-sitter highlighting (grammars packaged by us, license-clean)
-- [ ] User Defined Language system + GUI editor, XML import/export
-- [ ] Code folding
-- [ ] Auto-completion (word/function), brace and tag matching
-- [ ] Function List panel
-
-## v0.4 — Panels and views
-
-- [ ] Dockable panel framework (prerequisite for everything below)
-- [ ] Split view / clone document to second view
-- [ ] Document Map, Document List, Folder as Workspace, Clipboard History,
+**Views**
+- [x] Dockable panel framework, split view with shared-buffer clone
+- [x] Document Map, Function List, Folder as Workspace, Clipboard History,
       Character Panel
+- [x] Full screen, distraction-free, always-on-top equivalent
 
-## v0.5 — Automation
+**Automation and customisation**
+- [x] Macros (record/playback/N-times/until-EOF), Run menu with variables
+- [x] Preferences (10 pages), themes, Shortcut Mapper with conflict detection
+- [x] Plugin system (JavaScriptCore) + Plugins Admin
 
-- [ ] Macro record/playback/save, run N times / to end of file
-- [ ] Run menu with variable substitution
-- [ ] Shortcut Mapper
-- [ ] CLI shim (`notepadxx file:line:col`)
+**Distribution**
+- [x] Notarization pipeline written; every step validated except the
+      notarytool call, which needs credentials (see below)
 
-## v0.6 — Customisation
+## Remaining
 
-- [ ] Preferences (24 pages)
-- [ ] Style Configurator, themes, dark mode
-- [ ] Compare/diff built in
+**Files/Tabs**
+- [ ] Tab reorder by drag, pin/lock, per-tab colour, sort tabs
+- [ ] Recent files menu, print, drag-and-drop of files onto the window
+- [ ] File-change detection UI (the model exists; the prompt does not)
+- [ ] Rename / move / delete from the File menu
 
-## v1.0 — Ship
+**Editing**
+- [ ] Multi-caret editing beyond what the engine provides by default
+- [ ] Change-history margin, edge guide rendering, clickable URLs
 
-- [ ] Plugin system (JavaScriptCore script tier + native XPC tier)
-- [ ] Notarized DMG, Sparkle updates
-- [ ] Parity matrix fully reconciled
+**Languages**
+- [ ] The remaining ~70 built-in languages (data entries, not new code)
+- [ ] UDL authoring GUI (import/export and the lexer engine already work)
+
+**Views/Sessions**
+- [ ] Project panels and project files, named sessions
+
+**Distribution**
+- [ ] Notarized DMG — **blocked**: needs a Developer ID Application
+      certificate plus `NOTARY_APPLE_ID`/`NOTARY_PASSWORD`/`NOTARY_TEAM_ID`
+      or an App Store Connect API key. `scripts/release.sh` refuses to run
+      without them rather than emitting a build Gatekeeper would reject.
 
 ## Open decisions
 
 - **Regex flavor.** Notepad++ uses Boost; `NSRegularExpression` is ICU. `\K`,
-  conditionals, recursion and `\g{NAME}` have no ICU equivalent. Either ship ICU
-  and document divergence, or vendor a Boost-compatible engine. Must not
-  silently reinterpret patterns.
-- **Unbounded large files.** Current storage is ~6x file size in RAM. True
-  GB-scale support needs chunked/memory-mapped storage.
-- **Plugin tiers.** Script-only is App Store compatible; native XPC is more
-  powerful but direct-download only.
+  conditionals, recursion and `\g{NAME}` have no ICU equivalent. Currently
+  these surface as errors rather than being silently reinterpreted. Either
+  document the divergence in-app or vendor a Boost-compatible engine.
+- **Unbounded large files.** Storage is ~6x file size in RAM, so multi-GB
+  files are not supported. True GB-scale needs chunked/memory-mapped storage.
+- **Native plugin tier.** The script tier cannot register dockable panels. An
+  XPC-hosted native tier would allow it, direct-download only.

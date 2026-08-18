@@ -16,16 +16,21 @@ and GUI-authored custom syntax highlighting — free, with no nag screens.
 
 ## Status
 
-Early. The foundation is built and verified:
+Working editor, not yet at parity. Implemented and verified:
 
-- Tabs, open/save/save-as/save-all, close
+- Tabs, open/save/save-as/save-all/close, CLI open at `file:line:column`
 - Session restore including **crash-safe unsaved buffers** — untitled scratch
   buffers survive `kill -9` and come back with no save prompt
-- Encoding detection (BOM-aware) with Notepad++'s "Convert to" vs "Encode in"
-  distinction
-- Line-ending detection, display and conversion (CRLF/LF/CR)
-- Status bar: length, lines, selection, caret line/column, EOL, encoding
+- Syntax highlighting for 24 languages, folding, Function List, autocomplete
+- Column mode with the Column Editor, bookmarks, brace matching
+- Find/Replace, Find in Files with a clickable results panel
+- Split view, Document Map, Folder as Workspace, Clipboard History
+- Macros, Run menu, Preferences, themes, Shortcut Mapper
+- A JavaScript plugin system with Plugins Admin (see `docs/PLUGINS.md`)
+- Encoding/BOM handling with Notepad++'s "Convert to" vs "Encode in" split
 - Large-file performance validated (see below)
+
+See `docs/ROADMAP.md` for what is still missing.
 
 ## Performance
 
