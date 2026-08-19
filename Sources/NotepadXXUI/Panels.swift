@@ -104,6 +104,10 @@ public final class FolderWorkspacePanel: NSObject, DockablePanel {
     private let outlineView = NSOutlineView()
     private let scrollView = NSScrollView()
     private var roots: [URL] = []
+
+    /// The first workspace folder, used to seed Find in Files with the folder
+    /// the user is actually working in.
+    public var primaryRoot: URL? { roots.first }
     private var childrenCache: [URL: [URL]] = [:]
 
     public override init() {

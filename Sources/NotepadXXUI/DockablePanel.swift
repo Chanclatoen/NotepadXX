@@ -1,4 +1,5 @@
 import AppKit
+import NotepadXXDesign
 
 /// Where a panel docks. Notepad++ allows left/right/bottom docking plus
 /// floating; these map onto split-view sides.
@@ -43,6 +44,22 @@ public final class DockHostView: NSView {
     private var floatingWindows: [String: NSPanel] = [:]
     private let defaultsKey = "NotepadXX.DockLayout"
 
+    /// Where each panel is docked now, which may differ from its preference
+    /// once the user has moved it.
+    private var dockPositions: [String: DockPosition] = [:]
+    /// Divider sizes, updated as the user drags and restored on launch.
+    private var currentLeftWidth: CGFloat = 260
+    private var currentRightWidth: CGFloat = 260
+    private var currentBottomHeight: CGFloat = 180
+    /// Suppresses saving while a restore is in flight, so a partly-applied
+    /// layout is never written back over the saved one.
+    private var isRestoring = false
+    /// Nothing is saved until the host has either restored a layout or been
+    /// told to change one. Laying out an empty host emits split-view resize
+    /// notifications, and saving those would overwrite the user's saved layout
+    /// with an empty one before it had a chance to load.
+    private var acceptsSaves = false
+
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         buildLayout()
@@ -52,6 +69,10 @@ public final class DockHostView: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     private func buildLayout() {
+        for container in [leftContainer, rightContainer, bottomContainer] {
+            container.onClosePanel = { [weak self] identifier in self?.hide(identifier) }
+            container.onFloatPanel = { [weak self] identifier in self?.float(identifier) }
+        }
         // Docks are added to the split only when they hold a panel. Merely
         // hiding them leaves their divider in place, and the divider indices
         // then no longer line up with what is on screen.
@@ -61,6 +82,8 @@ public final class DockHostView: NSView {
 
         outerSplit.isVertical = false
         outerSplit.dividerStyle = .thin
+        innerSplit.delegate = self
+        outerSplit.delegate = self
         outerSplit.addArrangedSubview(innerSplit)
 
         outerSplit.translatesAutoresizingMaskIntoConstraints = false
@@ -90,8 +113,9 @@ public final class DockHostView: NSView {
     }
 
     public func show(_ identifier: String) {
+        acceptsSaves = true
         guard let panel = panels[identifier], !visibleIdentifiers.contains(identifier) else { return }
-        container(for: panel.preferredPosition).add(panel)
+        container(for: position(of: panel)).add(panel)
         visibleIdentifiers.insert(identifier)
         panel.panelDidBecomeVisible()
         updateContainerVisibility()
@@ -103,6 +127,7 @@ public final class DockHostView: NSView {
     /// Notepad++ lets panels float. On macOS a floating utility panel is the
     /// natural equivalent; closing it re-docks rather than losing the panel.
     public func float(_ identifier: String) {
+        acceptsSaves = true
         guard let panel = panels[identifier], floatingWindows[identifier] == nil else { return }
         hide(identifier)
 
@@ -127,6 +152,8 @@ public final class DockHostView: NSView {
             }
         }
         panel.panelDidBecomeVisible()
+        // Floating is part of the layout: hide() saved it as merely closed.
+        saveLayout()
     }
 
     public func isFloating(_ identifier: String) -> Bool {
@@ -140,8 +167,9 @@ public final class DockHostView: NSView {
     }
 
     public func hide(_ identifier: String) {
+        acceptsSaves = true
         guard let panel = panels[identifier] else { return }
-        container(for: panel.preferredPosition).remove(panel)
+        container(for: position(of: panel)).remove(panel)
         visibleIdentifiers.remove(identifier)
         updateContainerVisibility()
         saveLayout()
@@ -154,6 +182,22 @@ public final class DockHostView: NSView {
         }
     }
 
+    /// Where this panel sits: what the user last chose, or its preference.
+    public func position(of panel: DockablePanel) -> DockPosition {
+        dockPositions[panel.panelIdentifier] ?? panel.preferredPosition
+    }
+
+    /// Moves a panel to another dock, keeping it visible.
+    public func move(_ identifier: String, to position: DockPosition) {
+        acceptsSaves = true
+        guard let panel = panels[identifier] else { return }
+        let wasVisible = visibleIdentifiers.contains(identifier)
+        if wasVisible { hide(identifier) }
+        dockPositions[identifier] = position
+        if wasVisible { show(identifier) }
+        saveLayout()
+    }
+
     private func container(for position: DockPosition) -> PanelStackView {
         switch position {
         case .left: return leftContainer
@@ -161,11 +205,6 @@ public final class DockHostView: NSView {
         case .bottom: return bottomContainer
         }
     }
-
-    /// Default dock sizes. NSSplitView otherwise hands almost all the space to
-    /// a newly added subview, squeezing the editor down to a sliver.
-    private let sideDockWidth: CGFloat = 260
-    private let bottomDockHeight: CGFloat = 180
 
     /// A dock with no panels is removed from the split entirely.
     private func updateContainerVisibility() {
@@ -187,35 +226,111 @@ public final class DockHostView: NSView {
         }
     }
 
-    /// Pins each visible dock to its default size, leaving the rest to the editor.
+    /// Restores each visible dock to the size the user left it at.
     private func applyDockSizes() {
         let width = innerSplit.bounds.width
         let height = outerSplit.bounds.height
         guard width > 0, height > 0 else { return }
 
         if bottomContainer.superview === outerSplit {
-            outerSplit.setPosition(height - bottomDockHeight, ofDividerAt: 0)
+            outerSplit.setPosition(height - currentBottomHeight, ofDividerAt: 0)
         }
         // Dividers are indexed left to right across the attached subviews.
         var divider = 0
         if leftContainer.superview === innerSplit {
-            innerSplit.setPosition(sideDockWidth, ofDividerAt: divider)
+            innerSplit.setPosition(currentLeftWidth, ofDividerAt: divider)
             divider += 1
         }
         if rightContainer.superview === innerSplit {
-            innerSplit.setPosition(width - sideDockWidth, ofDividerAt: divider)
+            innerSplit.setPosition(width - currentRightWidth, ofDividerAt: divider)
         }
+    }
+
+    /// Records the sizes after the user drags a divider, so they survive a
+    /// relaunch rather than snapping back to the defaults.
+    fileprivate func recordDockSizes() {
+        guard !isRestoring else { return }
+        if leftContainer.superview === innerSplit, leftContainer.bounds.width > 0 {
+            currentLeftWidth = leftContainer.bounds.width
+        }
+        if rightContainer.superview === innerSplit, rightContainer.bounds.width > 0 {
+            currentRightWidth = rightContainer.bounds.width
+        }
+        if bottomContainer.superview === outerSplit, bottomContainer.bounds.height > 0 {
+            currentBottomHeight = bottomContainer.bounds.height
+        }
+        saveLayout()
     }
 
     // MARK: - Persistence
 
+    /// Everything about the panel layout that belongs to the user: which
+    /// panels are open, where each one is docked, which are floating, and how
+    /// big the docks are. Saving only visibility loses the arrangement, which
+    /// is the part people notice.
+    struct Layout: Codable {
+        var visible: [String] = []
+        var floating: [String] = []
+        var positions: [String: DockPosition] = [:]
+        var leftWidth: CGFloat = 260
+        var rightWidth: CGFloat = 260
+        var bottomHeight: CGFloat = 180
+        var floatingFrames: [String: String] = [:]
+    }
+
     public func saveLayout() {
-        UserDefaults.standard.set(Array(visibleIdentifiers), forKey: defaultsKey)
+        guard !isRestoring, acceptsSaves else { return }
+        var layout = Layout()
+        layout.visible = Array(visibleIdentifiers).sorted()
+        layout.floating = Array(floatingWindows.keys).sorted()
+        layout.positions = dockPositions
+        layout.leftWidth = currentLeftWidth
+        layout.rightWidth = currentRightWidth
+        layout.bottomHeight = currentBottomHeight
+        for (identifier, window) in floatingWindows {
+            layout.floatingFrames[identifier] = NSStringFromRect(window.frame)
+        }
+        guard let data = try? JSONEncoder().encode(layout) else { return }
+        UserDefaults.standard.set(data, forKey: defaultsKey)
     }
 
     public func restoreLayout() {
+        acceptsSaves = true
+        guard let data = UserDefaults.standard.data(forKey: defaultsKey),
+              let layout = try? JSONDecoder().decode(Layout.self, from: data) else {
+            restoreLegacyLayout()
+            return
+        }
+        isRestoring = true
+        dockPositions = layout.positions
+        currentLeftWidth = layout.leftWidth
+        currentRightWidth = layout.rightWidth
+        currentBottomHeight = layout.bottomHeight
+        for identifier in layout.visible where !layout.floating.contains(identifier) {
+            show(identifier)
+        }
+        for identifier in layout.floating {
+            float(identifier)
+            if let string = layout.floatingFrames[identifier] {
+                floatingWindows[identifier]?.setFrame(NSRectFromString(string), display: true)
+            }
+        }
+        isRestoring = false
+        applyDockSizes()
+    }
+
+    /// Layouts written before positions and sizes were saved were a plain
+    /// array of identifiers.
+    private func restoreLegacyLayout() {
         guard let saved = UserDefaults.standard.array(forKey: defaultsKey) as? [String] else { return }
         for identifier in saved { show(identifier) }
+    }
+
+}
+
+extension DockHostView: NSSplitViewDelegate {
+    public func splitViewDidResizeSubviews(_ notification: Notification) {
+        recordDockSizes()
     }
 }
 
@@ -254,12 +369,18 @@ final class PanelStackView: NSView {
 
     var isEmpty: Bool { hosted.isEmpty }
 
+    /// Called when a panel's header asks to close or float it.
+    var onClosePanel: ((String) -> Void)?
+    var onFloatPanel: ((String) -> Void)?
+
     func add(_ panel: DockablePanel) {
         guard hosted[panel.panelIdentifier] == nil else { return }
         let wrapper = NSView()
-        let header = NSTextField(labelWithString: panel.panelTitle.uppercased())
-        header.font = .systemFont(ofSize: 10, weight: .semibold)
-        header.textColor = .secondaryLabelColor
+        // Sentence case, not upper: the design refuses shouted panel headers.
+        let header = DSPanelHeader(title: panel.panelTitle)
+        let identifier = panel.panelIdentifier
+        header.onClose = { [weak self] in self?.onClosePanel?(identifier) }
+        header.onFloat = { [weak self] in self?.onFloatPanel?(identifier) }
 
         let content = panel.contentView
         for subview in [header, content] {
@@ -267,9 +388,10 @@ final class PanelStackView: NSView {
             wrapper.addSubview(subview)
         }
         NSLayoutConstraint.activate([
-            header.topAnchor.constraint(equalTo: wrapper.topAnchor, constant: 6),
-            header.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: 8),
-            content.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 4),
+            header.topAnchor.constraint(equalTo: wrapper.topAnchor),
+            header.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor),
+            header.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor),
+            content.topAnchor.constraint(equalTo: header.bottomAnchor),
             content.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor),
             content.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor),
             content.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor),

@@ -139,7 +139,7 @@ final class AuditSearchTests: XCTestCase {
     }
     private func request(_ pattern: String, _ replacement: String = "",
                          _ options: SearchOptions = SearchOptions(),
-                         inSelection: Bool = false) -> FindPanelController.Request {
+                         inSelection: Bool = false) -> SearchPanelController.Request {
         .init(pattern: pattern, replacement: replacement, options: options, inSelection: inSelection)
     }
 

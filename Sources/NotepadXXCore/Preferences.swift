@@ -12,6 +12,8 @@ public struct Preferences: Codable, Equatable, Sendable {
     /// Tab strip arrangement: "horizontal", "wrapped" or "vertical".
     /// A single value rather than two booleans that can disagree.
     public var tabLayoutRawValue: String = "horizontal"
+    /// Which mode the one search panel was last left in.
+    public var searchPanelModeRawValue: Int = 0
     public var tabCloseButtonOnEachTab: Bool = true
     public var confirmCloseUnsaved: Bool = false   // Notepad++ scratchpad behaviour
 

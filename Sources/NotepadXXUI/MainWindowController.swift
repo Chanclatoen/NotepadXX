@@ -25,8 +25,8 @@ public final class MainWindowController: NSWindowController {
     private var untitledCounter = 0
     /// Indentation width used by tab/space conversion commands.
     public var tabWidth: Int = 4
-    var installedFindPanel: FindPanelController?
-    var installedResultsPanel: SearchResultsPanelController?
+    var installedFindPanel: SearchPanelController?
+    var searchResultsPanel: SearchResultsPanel?
     var installedColumnEditor: ColumnEditorPanel?
     // View-menu display state, applied to every editor so it behaves like a
     // preference rather than a per-tab quirk.

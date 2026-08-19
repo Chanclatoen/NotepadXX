@@ -179,6 +179,37 @@ public enum DS {
             public let rule: NSColor?
             public enum Form { case fillOnly, solidUnderline, outlineBox, dashedUnderline, doubleUnderline }
             public let form: Form
+
+            /// One drawing routine for both the editor's marks and the style
+            /// picker, so a swatch always shows what the text will look like.
+            public func draw(in rect: NSRect) {
+                fill.setFill()
+                rect.fill()
+                guard let rule else { return }
+                rule.setStroke()
+
+                let path = NSBezierPath()
+                path.lineWidth = 1
+                switch form {
+                case .fillOnly:
+                    return
+                case .solidUnderline:
+                    path.move(to: NSPoint(x: rect.minX, y: rect.maxY - 0.5))
+                    path.line(to: NSPoint(x: rect.maxX, y: rect.maxY - 0.5))
+                case .outlineBox:
+                    path.appendRect(rect.insetBy(dx: 0.5, dy: 0.5))
+                case .dashedUnderline:
+                    path.setLineDash([3, 2], count: 2, phase: 0)
+                    path.move(to: NSPoint(x: rect.minX, y: rect.maxY - 0.5))
+                    path.line(to: NSPoint(x: rect.maxX, y: rect.maxY - 0.5))
+                case .doubleUnderline:
+                    path.move(to: NSPoint(x: rect.minX, y: rect.maxY - 0.5))
+                    path.line(to: NSPoint(x: rect.maxX, y: rect.maxY - 0.5))
+                    path.move(to: NSPoint(x: rect.minX, y: rect.maxY - 2.5))
+                    path.line(to: NSPoint(x: rect.maxX, y: rect.maxY - 2.5))
+                }
+                path.stroke()
+            }
         }
 
         public static func styles() -> [Style] { [

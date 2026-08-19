@@ -121,8 +121,8 @@ final class SearchCommandTests: XCTestCase {
 
     private func request(_ pattern: String, replacement: String = "",
                          options: SearchOptions = SearchOptions(),
-                         inSelection: Bool = false) -> FindPanelController.Request {
-        FindPanelController.Request(pattern: pattern, replacement: replacement,
+                         inSelection: Bool = false) -> SearchPanelController.Request {
+        SearchPanelController.Request(pattern: pattern, replacement: replacement,
                                     options: options, inSelection: inSelection)
     }
 

@@ -156,9 +156,47 @@ public enum MainMenu {
 
     private static func searchMenu() -> NSMenuItem {
         submenu("Search") { menu in
+            // Each item opens the same panel in its own mode, so there is one
+            // search surface rather than a separate dialog per command.
             add(menu, "Find…", #selector(MainWindowController.showFindPanelAction(_:)), "f")
-            add(menu, "Replace…", #selector(MainWindowController.showFindPanelAction(_:)), "h")
-            add(menu, "Find in Files…", #selector(MainWindowController.findInFilesAction(_:)), "f", [.command, .shift])
+            add(menu, "Replace…", #selector(MainWindowController.showReplacePanelAction(_:)), "h")
+            add(menu, "Find in Files…", #selector(MainWindowController.showFindInFilesAction(_:)),
+                "f", [.command, .shift])
+            add(menu, "Mark…", #selector(MainWindowController.showMarkPanelAction(_:)), "m", [.command, .shift])
+            menu.addItem(.separator())
+
+            add(menu, "Find Next", #selector(MainWindowController.findNextAction(_:)), "g")
+            add(menu, "Find Previous", #selector(MainWindowController.findPreviousAction(_:)), "g", [.command, .shift])
+            add(menu, "Select and Find Next", #selector(MainWindowController.selectAndFindNextAction(_:)),
+                "g", [.command, .option])
+            add(menu, "Incremental Search", #selector(MainWindowController.incrementalSearchAction(_:)),
+                "i", [.command, .option])
+            add(menu, "Cycle Search Mode", #selector(MainWindowController.cycleSearchModeAction(_:)),
+                "x", [.command, .option])
+            menu.addItem(.separator())
+
+            let marks = NSMenuItem(title: "Mark", action: nil, keyEquivalent: "")
+            let markMenu = NSMenu(title: "Mark")
+            add(markMenu, "Mark All", #selector(MainWindowController.markAllAction(_:)))
+            add(markMenu, "Clear Marks", #selector(MainWindowController.clearMarksAction(_:)))
+            add(markMenu, "Copy Marked Text", #selector(MainWindowController.copyMarkedTextAction(_:)))
+            marks.submenu = markMenu
+            menu.addItem(marks)
+
+            let bookmarks = NSMenuItem(title: "Bookmark", action: nil, keyEquivalent: "")
+            let bookmarkMenu = NSMenu(title: "Bookmark")
+            add(bookmarkMenu, "Toggle Bookmark", #selector(MainWindowController.toggleBookmarkAction(_:)),
+                "k", [.command, .shift])
+            add(bookmarkMenu, "Next Bookmark", #selector(MainWindowController.nextBookmarkAction(_:)))
+            add(bookmarkMenu, "Previous Bookmark", #selector(MainWindowController.previousBookmarkAction(_:)))
+            add(bookmarkMenu, "Clear All Bookmarks", #selector(MainWindowController.clearBookmarksAction(_:)))
+            add(bookmarkMenu, "Invert Bookmarks", #selector(MainWindowController.invertBookmarksAction(_:)))
+            add(bookmarkMenu, "Copy Bookmarked Lines", #selector(MainWindowController.copyBookmarkedLinesAction(_:)))
+            add(bookmarkMenu, "Cut Bookmarked Lines", #selector(MainWindowController.cutBookmarkedLinesAction(_:)))
+            add(bookmarkMenu, "Remove Bookmarked Lines", #selector(MainWindowController.removeBookmarkedLinesAction(_:)))
+            bookmarks.submenu = bookmarkMenu
+            menu.addItem(bookmarks)
+
             menu.addItem(.separator())
             add(menu, "Go to Line…", #selector(MainWindowController.goToLineDialogAction(_:)), "l")
         }
@@ -187,7 +225,6 @@ public enum MainMenu {
             menu.addItem(zoom)
 
             menu.addItem(.separator())
-            add(menu, "Toggle Full Screen", #selector(MainWindowController.toggleFullScreenAction(_:)))
             add(menu, "Distraction Free Mode", #selector(MainWindowController.toggleDistractionFreeAction(_:)))
             add(menu, "Always on Top", #selector(MainWindowController.toggleAlwaysOnTopAction(_:)))
             add(menu, "Document Map", #selector(MainWindowController.toggleDocumentMapAction(_:)))

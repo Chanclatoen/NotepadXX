@@ -56,7 +56,17 @@ extension MainWindowController {
         }
         self.projectPanel = projects
 
-        for panel in [functionList, workspace, clipboard, characters, documentMap, projects] as [DockablePanel] {
+        // Search Results docks at the bottom like any other panel, so it can
+        // be floated, resized and closed the same way.
+        let searchResults = SearchResultsPanel()
+        searchResults.onSelectHit = { [weak self] url, line in self?.reveal(url: url, line: line) }
+        searchResults.onSelectHitInOtherPane = { [weak self] url, line in
+            self?.revealInOtherPane(url: url, line: line)
+        }
+        self.searchResultsPanel = searchResults
+
+        for panel in [functionList, workspace, clipboard, characters, documentMap,
+                      projects, searchResults] as [DockablePanel] {
             host.register(panel)
         }
         self.functionListPanel = functionList
@@ -64,6 +74,7 @@ extension MainWindowController {
     }
 
     @objc public func toggleFunctionListAction(_ sender: Any?) { dockHost?.toggle("functionList") }
+    @objc public func toggleSearchResultsAction(_ sender: Any?) { dockHost?.toggle("searchResults") }
     @objc public func toggleDocumentMapAction(_ sender: Any?) { dockHost?.toggle("documentMap") }
     @objc public func toggleProjectPanelAction(_ sender: Any?) { dockHost?.toggle("projectPanel") }
 

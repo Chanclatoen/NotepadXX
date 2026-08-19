@@ -65,6 +65,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             windowController.currentEditor?.selectedRange = NSRange(location: 0, length: 0)
             windowController.selectAllOccurrencesAction(nil)
         }
+        // Each search mode can be photographed on its own, so the one panel
+        // can be checked in every mode it offers.
+        if let mode = ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"],
+           mode.hasPrefix("search-") {
+            let modes: [String: SearchPanelController.Mode] = [
+                "search-find": .find, "search-replace": .replace,
+                "search-files": .findInFiles, "search-mark": .mark,
+            ]
+            windowController.showSearchPanel(mode: modes[mode] ?? .find)
+        }
         if ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "prefs" {
             windowController.showPreferencesAction(nil)
         }

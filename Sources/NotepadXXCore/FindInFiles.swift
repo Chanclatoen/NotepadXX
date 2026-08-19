@@ -5,13 +5,19 @@ public struct FileSearchHit: Equatable, Sendable {
     public let url: URL
     public let lineNumber: Int
     public let lineText: String
+    /// The match's range in the whole document.
     public let range: NSRange
+    /// The same match, offset into `lineText`, so a results row can highlight
+    /// it without recomputing where the line started.
+    public let rangeInLine: NSRange
 
-    public init(url: URL, lineNumber: Int, lineText: String, range: NSRange) {
+    public init(url: URL, lineNumber: Int, lineText: String, range: NSRange,
+                rangeInLine: NSRange = NSRange(location: NSNotFound, length: 0)) {
         self.url = url
         self.lineNumber = lineNumber
         self.lineText = lineText
         self.range = range
+        self.rangeInLine = rangeInLine
     }
 }
 
@@ -28,16 +34,20 @@ public struct FileSearchResult: Equatable, Sendable {
 public struct FindInFilesOptions: Sendable {
     /// Semicolon or space separated globs, e.g. "*.swift *.txt". Empty means all.
     public var filters: String
+    /// Semicolon separated names to skip, e.g. "build/;.git/;*.xcodeproj". A
+    /// trailing slash excludes a whole directory; otherwise it matches files.
+    public var exclusions: String
     public var inSubfolders: Bool
     public var inHiddenFolders: Bool
     /// Skip files larger than this. Keeps a stray 2GB binary from stalling a search.
     public var maximumFileSize: Int
 
     public init(
-        filters: String = "", inSubfolders: Bool = true,
+        filters: String = "", exclusions: String = "", inSubfolders: Bool = true,
         inHiddenFolders: Bool = false, maximumFileSize: Int = 64 * 1024 * 1024
     ) {
         self.filters = filters
+        self.exclusions = exclusions
         self.inSubfolders = inSubfolders
         self.inHiddenFolders = inHiddenFolders
         self.maximumFileSize = maximumFileSize
@@ -55,8 +65,37 @@ public struct FindInFilesOptions: Sendable {
         let patterns = filterPatterns
         guard !patterns.isEmpty else { return true }
         return patterns.contains { pattern in
-            NSPredicate(format: "SELF LIKE[c] %@", pattern).evaluate(with: name)
+            Self.glob(pattern, matches: name)
         }
+    }
+
+    /// Directory names to skip, written with a trailing slash.
+    public var excludedDirectories: [String] {
+        exclusionPatterns.filter { $0.hasSuffix("/") }.map { String($0.dropLast()) }
+    }
+
+    /// File globs to skip.
+    public var excludedFiles: [String] {
+        exclusionPatterns.filter { !$0.hasSuffix("/") }
+    }
+
+    private var exclusionPatterns: [String] {
+        exclusions
+            .split(whereSeparator: { $0 == ";" || $0 == " " || $0 == "," })
+            .map(String.init)
+            .filter { !$0.isEmpty }
+    }
+
+    public func isExcludedDirectory(_ name: String) -> Bool {
+        excludedDirectories.contains { Self.glob($0, matches: name) }
+    }
+
+    public func isExcludedFile(_ name: String) -> Bool {
+        excludedFiles.contains { Self.glob($0, matches: name) }
+    }
+
+    private static func glob(_ pattern: String, matches name: String) -> Bool {
+        NSPredicate(format: "SELF LIKE[c] %@", pattern).evaluate(with: name)
     }
 }
 
@@ -124,7 +163,9 @@ public struct FindInFiles {
             let lineText = content.substring(with: lineRange)
                 .trimmingCharacters(in: CharacterSet(charactersIn: "\n\r"))
             return FileSearchHit(
-                url: url, lineNumber: index + 1, lineText: lineText, range: match.range
+                url: url, lineNumber: index + 1, lineText: lineText, range: match.range,
+                rangeInLine: NSRange(location: match.range.location - start,
+                                     length: match.range.length)
             )
         }
     }
@@ -155,12 +196,19 @@ public struct FindInFiles {
         for case let url as URL in enumerator {
             let values = try? url.resourceValues(forKeys: Set(keys))
             if values?.isDirectory == true {
+                // Skipping descendants here is what makes an exclusion cheap:
+                // an excluded build directory is never walked at all.
+                if options.isExcludedDirectory(url.lastPathComponent) {
+                    enumerator.skipDescendants()
+                    continue
+                }
                 if !options.inSubfolders && url != directory { enumerator.skipDescendants() }
                 continue
             }
             guard values?.isRegularFile == true else { continue }
             if let size = values?.fileSize, size > options.maximumFileSize { continue }
             guard options.matchesFilter(url.lastPathComponent) else { continue }
+            guard !options.isExcludedFile(url.lastPathComponent) else { continue }
             files.append(url)
         }
         return files
