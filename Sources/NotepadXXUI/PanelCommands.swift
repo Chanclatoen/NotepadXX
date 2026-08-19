@@ -59,6 +59,9 @@ extension MainWindowController {
 
         // Search Results docks at the bottom like any other panel, so it can
         // be floated, resized and closed the same way.
+        let runOutput = RunOutputPanel()
+        self.runOutputPanel = runOutput
+
         let searchResults = SearchResultsPanel()
         searchResults.onSelectHit = { [weak self] url, line in self?.reveal(url: url, line: line) }
         searchResults.onSelectHitInOtherPane = { [weak self] url, line in
@@ -67,7 +70,7 @@ extension MainWindowController {
         self.searchResultsPanel = searchResults
 
         for panel in [functionList, workspace, clipboard, characters, documentMap,
-                      projects, searchResults] as [DockablePanel] {
+                      projects, searchResults, runOutput] as [DockablePanel] {
             host.register(panel)
         }
         self.functionListPanel = functionList

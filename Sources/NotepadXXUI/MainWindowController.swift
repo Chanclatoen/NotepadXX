@@ -28,6 +28,9 @@ public final class MainWindowController: NSWindowController {
     var installedFindPanel: SearchPanelController?
     var installedGoToPanel: GoToPanelController?
     var documentSwitcherMonitor: Any?
+    var installedRunPanel: RunPanelController?
+    var installedRunMacroPanel: RunMacroPanelController?
+    var runOutputPanel: RunOutputPanel?
     var searchResultsPanel: SearchResultsPanel?
     var installedColumnEditor: ColumnEditorPanel?
     // View-menu display state, applied to every editor so it behaves like a

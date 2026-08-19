@@ -22,21 +22,27 @@ extension MainWindowController: MacroPlaybackTarget {
 
     @objc public func runMacroMultipleTimesAction(_ sender: Any?) {
         guard !lastRecordedSteps.isEmpty else { NSSound.beep(); return }
-        let alert = NSAlert()
-        alert.messageText = "Run macro"
-        alert.informativeText = "How many times? Leave blank to run until end of file."
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 120, height: 24))
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Run")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let panel = runMacroPanel()
+        panel.present(macros: macroStore?.macros.map(\.name) ?? [],
+                      stepCount: lastRecordedSteps.count)
+    }
 
-        let macro = Macro(name: "current", steps: lastRecordedSteps)
-        if let times = Int(field.stringValue), times > 0 {
-            MacroPlayer.play(macro, on: self, times: times)
-        } else {
-            MacroPlayer.playUntilEndOfDocument(macro, on: self)
+    func runMacroPanel() -> RunMacroPanelController {
+        if let existing = installedRunMacroPanel { return existing }
+        let panel = RunMacroPanelController()
+        panel.onRun = { [weak self] name, times in
+            guard let self else { return }
+            let steps = self.macroStore?.macros.first { $0.name == name }?.steps
+                ?? self.lastRecordedSteps
+            let macro = Macro(name: name, steps: steps)
+            if let times {
+                MacroPlayer.play(macro, on: self, times: times)
+            } else {
+                MacroPlayer.playUntilEndOfDocument(macro, on: self)
+            }
         }
+        installedRunMacroPanel = panel
+        return panel
     }
 
     @objc public func saveCurrentMacroAction(_ sender: Any?) {
@@ -82,27 +88,30 @@ extension MainWindowController: MacroPlaybackTarget {
     // MARK: - Run
 
     @objc public func runCommandAction(_ sender: Any?) {
-        let alert = NSAlert()
-        alert.messageText = "Run"
-        alert.informativeText = "Variables: $(FULL_CURRENT_PATH), $(CURRENT_DIRECTORY), $(FILE_NAME), $(NAME_PART), $(EXT_PART), $(CURRENT_WORD), $(CURRENT_LINE), $(CURRENT_COLUMN)"
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 380, height: 24))
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Run")
-        alert.addButton(withTitle: "Save…")
-        alert.addButton(withTitle: "Cancel")
-
-        let response = alert.runModal()
-        guard response != .alertThirdButtonReturn, !field.stringValue.isEmpty else { return }
-
-        if response == .alertSecondButtonReturn {
-            try? runCommandStore?.add(RunCommand(name: field.stringValue, command: field.stringValue))
-            return
-        }
-        execute(command: field.stringValue)
+        runPanel().present()
     }
 
-    /// Runs a command through the user's shell and reports failures.
-    func execute(command: String) {
+    func runPanel() -> RunPanelController {
+        if let existing = installedRunPanel { return existing }
+        let panel = RunPanelController()
+        panel.onRun = { [weak self] command, capturesOutput, savesFirst in
+            guard let self else { return }
+            if savesFirst { self.saveDocumentAction(nil) }
+            self.execute(command: command, capturingOutput: capturesOutput)
+        }
+        panel.onSave = { [weak self] command in
+            try? self?.runCommandStore?.add(RunCommand(name: command, command: command))
+        }
+        installedRunPanel = panel
+        return panel
+    }
+
+    /// Runs a command through the user's shell.
+    ///
+    /// Output is captured into the Run Output panel when asked for, so a
+    /// command that prints something is not a command that appears to do
+    /// nothing.
+    func execute(command: String, capturingOutput: Bool = false) {
         guard documents.indices.contains(activeIndex) else { return }
         let document = documents[activeIndex]
         let caret = currentEditor?.caretPosition() ?? (line: 1, column: 1)
@@ -116,7 +125,7 @@ extension MainWindowController: MacroPlaybackTarget {
             alert.messageText = "Unknown variable\(unknown.count == 1 ? "" : "s")"
             alert.informativeText = unknown.map { "$(\($0))" }.joined(separator: ", ")
                 + " will be passed through literally."
-            alert.runModal()
+            presentSheet(alert) { _ in }
         }
 
         let expanded = RunCommandExpander.expand(command, with: context)
@@ -124,13 +133,40 @@ extension MainWindowController: MacroPlaybackTarget {
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = ["-lc", expanded]
         process.currentDirectoryURL = document.fileURL?.deletingLastPathComponent()
+
+        var pipe: Pipe?
+        if capturingOutput, let panel = runOutputPanel {
+            dockHost?.show("runOutput")
+            panel.begin(command: expanded)
+            let output = Pipe()
+            pipe = output
+            process.standardOutput = output
+            process.standardError = output
+            output.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { panel.append(text) }
+                }
+            }
+            process.terminationHandler = { finished in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        output.fileHandleForReading.readabilityHandler = nil
+                        panel.finish(status: finished.terminationStatus)
+                    }
+                }
+            }
+        }
+
         do {
             try process.run()
         } catch {
+            pipe?.fileHandleForReading.readabilityHandler = nil
             let alert = NSAlert()
             alert.messageText = "Could not run command"
             alert.informativeText = error.localizedDescription
-            alert.runModal()
+            presentSheet(alert) { _ in }
         }
     }
 }

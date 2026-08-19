@@ -49,6 +49,13 @@ public struct RunContext: Sendable {
         )
     }
 
+    /// The variables a command may use, for the Run panel's menu. Taken from
+    /// the same table the expander reads, so the menu cannot offer a variable
+    /// that does not exist.
+    public static var variableNames: [String] {
+        RunContext().substitutions.keys.sorted()
+    }
+
     var substitutions: [String: String] {
         [
             "FULL_CURRENT_PATH": fullCurrentPath,
