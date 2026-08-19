@@ -1,0 +1,32 @@
+name: CodeQL
+
+# CodeQL does real dataflow analysis, which is what catches a tainted value
+# reaching a shell rather than merely matching a pattern.
+#
+# It is free for public repositories. On a private one it needs GitHub Advanced
+# Security, so until this repository is public the workflow will not run — it is
+# committed ready so that turning it on is a one-line change, not a rewrite.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 7 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze Swift
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: swift
+          queries: security-extended
+      - name: Build
+        run: swift build
+      - uses: github/codeql-action/analyze@v3

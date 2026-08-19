@@ -110,6 +110,28 @@ Requires macOS 14+ and Swift 6.
 keychain and stops before notarization unless notary credentials are set, so a
 build is never described as more blessed than it is.
 
+## Security
+
+Every push runs Semgrep, a full-history secret scan, and a check that the built
+app still has the hardened runtime and has gained no entitlement that weakens
+it. `.semgrep.yml` holds rules aimed at this program's own hazards rather than
+generic ones: the Run menu's shell invocation, the JavaScript plug-in bridge,
+and the plug-in catalogue it downloads from.
+
+Two things are worth knowing if you are reviewing it:
+
+- **Run commands go to a shell**, because they are written by the user and are
+  expected to support pipes and redirection. Substituted values — paths, file
+  names, the current word — are shell-quoted, so a file called
+  `notes; rm -rf ~ .txt` cannot become a second command. `ShellInjectionTests`
+  proves this by running a hostile name through a real shell.
+- **Plug-ins are JavaScript with a nine-function bridge** — get and set text,
+  selection, path, document count, and a message. JavaScriptCore has no file,
+  network or process access of its own, so that list is the whole capability
+  set. Archives are fetched over HTTPS only and checked against a SHA-256 from
+  the catalogue; plain HTTP is refused, because an attacker who can rewrite the
+  catalogue in transit would supply the hash as well.
+
 ## Documentation
 
 - `docs/ARCHITECTURE.md` — engine choice, the performance rule, rejected

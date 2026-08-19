@@ -7,35 +7,40 @@ final class RunCommandTests: XCTestCase {
     )
 
     func testExpandsPathVariables() {
-        XCTAssertEqual(RunCommandExpander.expand("$(FULL_CURRENT_PATH)", with: context), "/Users/me/proj/main.swift")
-        XCTAssertEqual(RunCommandExpander.expand("$(CURRENT_DIRECTORY)", with: context), "/Users/me/proj")
-        XCTAssertEqual(RunCommandExpander.expand("$(FILE_NAME)", with: context), "main.swift")
-        XCTAssertEqual(RunCommandExpander.expand("$(NAME_PART)", with: context), "main")
-        XCTAssertEqual(RunCommandExpander.expand("$(EXT_PART)", with: context), "swift")
+        // Values arrive shell-quoted: the expansion is handed to /bin/sh, and
+        // an unquoted path is a command-injection hole (ShellInjectionTests).
+        XCTAssertEqual(RunCommandExpander.expand("$(FULL_CURRENT_PATH)", with: context),
+                       "'/Users/me/proj/main.swift'")
+        XCTAssertEqual(RunCommandExpander.expand("$(CURRENT_DIRECTORY)", with: context), "'/Users/me/proj'")
+        XCTAssertEqual(RunCommandExpander.expand("$(FILE_NAME)", with: context), "'main.swift'")
+        XCTAssertEqual(RunCommandExpander.expand("$(NAME_PART)", with: context), "'main'")
+        XCTAssertEqual(RunCommandExpander.expand("$(EXT_PART)", with: context), "'swift'")
     }
 
     func testExpandsCaretVariables() {
-        XCTAssertEqual(RunCommandExpander.expand("$(CURRENT_WORD)", with: context), "widget")
-        XCTAssertEqual(RunCommandExpander.expand("$(CURRENT_LINE)", with: context), "12")
-        XCTAssertEqual(RunCommandExpander.expand("$(CURRENT_COLUMN)", with: context), "5")
+        XCTAssertEqual(RunCommandExpander.expand("$(CURRENT_WORD)", with: context), "'widget'")
+        XCTAssertEqual(RunCommandExpander.expand("$(CURRENT_LINE)", with: context), "'12'")
+        XCTAssertEqual(RunCommandExpander.expand("$(CURRENT_COLUMN)", with: context), "'5'")
     }
 
     func testExpandsSeveralVariablesInOneCommand() {
         let expanded = RunCommandExpander.expand("swiftc $(FILE_NAME) -o $(NAME_PART)", with: context)
-        XCTAssertEqual(expanded, "swiftc main.swift -o main")
+        XCTAssertEqual(expanded, "swiftc 'main.swift' -o 'main'")
     }
 
     /// A typo'd variable must stay visible rather than silently vanishing.
     func testUnknownVariablesAreLeftIntactAndReported() {
         let command = "run $(NOT_A_THING) $(FILE_NAME)"
-        XCTAssertEqual(RunCommandExpander.expand(command, with: context), "run $(NOT_A_THING) main.swift")
+        XCTAssertEqual(RunCommandExpander.expand(command, with: context), "run $(NOT_A_THING) 'main.swift'")
         XCTAssertEqual(RunCommandExpander.unknownVariables(in: command, context: context), ["NOT_A_THING"])
     }
 
     func testUntitledDocumentYieldsEmptyPaths() {
         let empty = RunContext.forDocument(path: nil, currentWord: "w")
-        XCTAssertEqual(RunCommandExpander.expand("$(FULL_CURRENT_PATH)", with: empty), "")
-        XCTAssertEqual(RunCommandExpander.expand("$(CURRENT_WORD)", with: empty), "w")
+        // An empty value still quotes, so the shell sees an empty argument
+        // rather than the argument disappearing and shifting the ones after it.
+        XCTAssertEqual(RunCommandExpander.expand("$(FULL_CURRENT_PATH)", with: empty), "''")
+        XCTAssertEqual(RunCommandExpander.expand("$(CURRENT_WORD)", with: empty), "'w'")
     }
 
     func testStorePersistsCommands() throws {

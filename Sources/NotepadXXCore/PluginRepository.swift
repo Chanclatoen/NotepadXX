@@ -68,6 +68,8 @@ public final class PluginRepository {
         case unreachable(String)
         case malformedCatalogue(String)
         case checksumMismatch(expected: String, actual: String)
+        /// A source or download that is not HTTPS.
+        case insecureTransport(String)
         case notAnArchive(String)
         case noPluginInArchive
     }
@@ -105,6 +107,7 @@ public final class PluginRepository {
 
         for url in sourceURLs {
             do {
+                try Self.requireSafeTransport(url)
                 let data: Data
                 if url.isFileURL {
                     data = try Data(contentsOf: url)
@@ -114,6 +117,8 @@ public final class PluginRepository {
                 loaded.append(try JSONDecoder().decode(PluginCatalogue.self, from: data))
             } catch is DecodingError {
                 failures.append(.malformedCatalogue(url.absoluteString))
+            } catch let error as RepositoryError {
+                failures.append(error)
             } catch {
                 failures.append(.unreachable(url.absoluteString))
             }
@@ -128,11 +133,27 @@ public final class PluginRepository {
         return failures
     }
 
+    /// Refuses any source that is not safe to fetch from.
+    ///
+    /// A file URL is a local catalogue the user pointed at deliberately and is
+    /// allowed. Everything crossing a network must be HTTPS, or the checksums
+    /// it carries mean nothing: an attacker who can rewrite the catalogue
+    /// supplies both the archive and the hash it is checked against.
+    nonisolated static func requireSafeTransport(_ url: URL) throws {
+        guard url.isFileURL || url.scheme?.lowercased() == "https" else {
+            throw RepositoryError.insecureTransport(url.absoluteString)
+        }
+    }
+
     /// Downloads, verifies and unpacks a plugin into `destination`.
     public func install(_ listing: PluginListing, into destination: URL) async throws -> URL {
         guard let url = URL(string: listing.downloadURL) else {
             throw RepositoryError.unreachable(listing.downloadURL)
         }
+
+        // Checked before anything is fetched: the checksum below is only as
+        // trustworthy as the transport the archive and its hash arrived over.
+        try Self.requireSafeTransport(url)
 
         let data: Data
         do {
@@ -141,6 +162,8 @@ public final class PluginRepository {
             } else {
                 (data, _) = try await session.data(from: url)
             }
+        } catch let error as RepositoryError {
+            throw error
         } catch {
             throw RepositoryError.unreachable(listing.downloadURL)
         }

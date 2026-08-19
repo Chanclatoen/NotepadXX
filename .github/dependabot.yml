@@ -1,0 +1,20 @@
+version: 2
+updates:
+  # Swift packages. The dependency surface is small, so a weekly check is
+  # enough to notice an advisory without generating noise.
+  - package-ecosystem: swift
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+
+  # The actions themselves are code that runs with repository credentials, so
+  # they are pinned and updated like any other dependency.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"

@@ -129,8 +129,15 @@ extension MainWindowController: MacroPlaybackTarget {
         }
 
         let expanded = RunCommandExpander.expand(command, with: context)
+        // A shell is deliberate here: Run commands are written by the user and
+        // are expected to support pipes, redirection and `&&`. What must never
+        // be shell syntax is the *substituted* values, and
+        // RunCommandExpander.expand quotes every one of them —
+        // ShellInjectionTests proves it by running a hostile file name through
+        // a real shell.
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        // nosemgrep: shell-command-with-interpolated-string
         process.arguments = ["-lc", expanded]
         process.currentDirectoryURL = document.fileURL?.deletingLastPathComponent()
 

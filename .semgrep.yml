@@ -1,0 +1,107 @@
+# Semgrep rules for NotepadXX.
+#
+# The generic Swift rulesets find little in an AppKit app, so these target the
+# three places this program can actually be made to do something it should not:
+# the Run menu's shell invocation, the JavaScript plugin bridge, and the plugin
+# catalogue it downloads from.
+rules:
+  - id: shell-command-with-interpolated-string
+    languages: [swift]
+    severity: ERROR
+    message: >-
+      A value is passed to a shell as a command. Every substituted value must be
+      shell-quoted first — a file name containing `;` or a backtick is legal on
+      macOS and otherwise becomes a second command. Pattern matching cannot see
+      whether quoting happened, so this needs a human: confirm the quoting, then
+      mark the line `nosemgrep` with the reason.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $P.arguments = ["-c", $CMD]
+          - pattern: |
+              $P.arguments = ["-lc", $CMD]
+          - pattern: |
+              $P.arguments = ["-lc", "...$X..."]
+      - pattern-not: |
+          $P.arguments = ["-lc", ShellQuoting.$F(...)]
+
+
+  - id: process-launching-a-shell
+    languages: [swift]
+    severity: WARNING
+    message: >-
+      Spawning /bin/sh means anything reaching the command string is code. Run
+      the target program directly with an argument array where that is possible.
+    pattern-either:
+      - pattern: |
+          $P.executableURL = URL(fileURLWithPath: "/bin/sh")
+      - pattern: |
+          $P.executableURL = URL(fileURLWithPath: "/bin/bash")
+      - pattern: |
+          $P.launchPath = "/bin/sh"
+
+  - id: plugin-bridge-widened
+    languages: [swift]
+    # A review prompt, not a defect: the nine calls that exist today are the
+    # intended API. It fires so that a tenth is noticed in review.
+    severity: INFO
+    message: >-
+      A new function is being exposed to plug-in JavaScript. The bridge is the
+      whole sandbox: JavaScriptCore has no file, network or process access of
+      its own, so anything added here is capability granted to every plug-in.
+      Confirm it cannot read arbitrary paths, reach the network, or run code.
+    patterns:
+      - pattern: |
+          $API.setObject($FN, forKeyedSubscript: $NAME)
+      - pattern-not: |
+          $API.setObject($FN, forKeyedSubscript: "log" as NSString)
+
+  - id: insecure-url-scheme-accepted
+    languages: [swift]
+    severity: ERROR
+    message: >-
+      A URL used for downloads is not checked for HTTPS. A plain-HTTP catalogue
+      can be rewritten in transit, and because the catalogue carries each
+      plug-in's checksum, the checksum then proves nothing.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              URLSession.shared.data(from: $URL)
+          - pattern: |
+              $SESSION.data(from: $URL)
+      - pattern-not-inside: |
+          guard $URL.scheme == "https" else { ... }
+          ...
+      - pattern-not-inside: |
+          if $URL.scheme != "https" { ... }
+          ...
+      - pattern-not-inside: |
+          try Self.requireSafeTransport($URL)
+          ...
+
+  - id: unsafe-plist-or-defaults-key-from-input
+    languages: [swift]
+    severity: INFO
+    message: >-
+      A defaults key built from a value the user controls. Harmless today, but
+      it lets one document's state overwrite another's if the value can collide.
+    pattern: |
+      UserDefaults.standard.set($V, forKey: "...\($K)...")
+
+  - id: disabled-signature-or-tls-checking
+    languages: [swift]
+    severity: ERROR
+    message: >-
+      TLS or code-signature validation is being weakened. There is no good
+      reason for this in a text editor.
+    pattern-either:
+      - pattern: |
+          $X.allowsArbitraryLoads = true
+      - pattern: |
+          NSAllowsArbitraryLoads
+      - pattern: |
+          func urlSession(..., didReceive challenge: ..., completionHandler: $H) {
+            ...
+            $H(.useCredential, URLCredential(trust: ...))
+            ...
+          }

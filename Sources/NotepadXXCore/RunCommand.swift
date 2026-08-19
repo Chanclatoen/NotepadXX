@@ -72,6 +72,21 @@ public struct RunContext: Sendable {
     }
 }
 
+/// Makes a value safe to drop into a shell command.
+public enum ShellQuoting {
+    /// Wraps a value in single quotes so a shell takes it as one literal word.
+    ///
+    /// Single quotes suspend every kind of expansion, so the only character
+    /// needing care is the single quote itself: the string is closed, an
+    /// escaped quote is added, and the string reopened.
+    ///
+    /// Adjacent quoted and unquoted text still joins into one word, so a
+    /// command like `echo prefix$(FILE_NAME)` keeps working.
+    public static func quoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+}
+
 /// A saved external command, as in Notepad++'s Run menu.
 public struct RunCommand: Codable, Equatable, Sendable, Identifiable {
     public var id: UUID
@@ -96,7 +111,11 @@ public enum RunCommandExpander {
         var result = command
         // Longest names first so NPP_FULL_FILE_PATH is not shadowed by a prefix.
         for key in substitutions.keys.sorted(by: { $0.count > $1.count }) {
-            result = result.replacingOccurrences(of: "$(\(key))", with: substitutions[key] ?? "")
+            // Quoted, because the result is handed to a shell. A file named
+            // `notes; rm -rf ~ .txt` is a legal file name, and unquoted it
+            // becomes a second command.
+            let value = ShellQuoting.quoted(substitutions[key] ?? "")
+            result = result.replacingOccurrences(of: "$(\(key))", with: value)
         }
         return result
     }

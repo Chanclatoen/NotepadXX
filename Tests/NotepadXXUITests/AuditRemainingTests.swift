@@ -196,8 +196,9 @@ final class AuditPanelsAndAutomationTests: XCTestCase {
         c.openOrFocus(url: url)
 
         let context = RunContext.forDocument(path: c.activeDocument?.fileURL?.path)
-        XCTAssertEqual(RunCommandExpander.expand("$(FILE_NAME)", with: context), "script.py")
-        XCTAssertEqual(RunCommandExpander.expand("$(EXT_PART)", with: context), "py")
+        // Quoted, because the result goes to a shell.
+        XCTAssertEqual(RunCommandExpander.expand("$(FILE_NAME)", with: context), "'script.py'")
+        XCTAssertEqual(RunCommandExpander.expand("$(EXT_PART)", with: context), "'py'")
     }
 
     func testPluginBridgeReadsAndWritesTheRealDocument() {
