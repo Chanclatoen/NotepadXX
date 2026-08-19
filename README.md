@@ -20,6 +20,16 @@ a documented OS-level reason to differ.
 
 </details>
 
+## Download
+
+[**NotepadXX 0.1.0**](https://github.com/Chanclatoen/NotepadXX/releases/latest)
+— macOS 14+, Apple Silicon.
+
+The build is signed with a Developer ID but not yet notarized, so macOS refuses
+it on first launch: right-click the app and choose **Open**, or run
+`xattr -d com.apple.quarantine /Applications/NotepadXX.app`. The signature
+itself is valid — `codesign --verify --strict` passes.
+
 ## Why this exists
 
 macOS has good editors, but nothing combines what Notepad++ users actually rely
