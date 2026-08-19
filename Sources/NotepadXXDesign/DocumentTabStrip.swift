@@ -56,12 +56,30 @@ public final class DocumentTabStrip: NSView {
 
     private(set) var items: [DSTabItem] = []
     private let scrollView = NSScrollView()
+    private var scrollLeading: NSLayoutConstraint!
+    private var scrollTrailing: NSLayoutConstraint!
     private let contentView = FlippedContainer()
     private var tabViews: [DSTabView] = []
+
+    /// Scroll affordances, shown only when the strip actually overflows: a
+    /// chevron at each edge and a button that lists every document. Without
+    /// them a scrolling strip gives no clue that there is more to the side.
+    private let scrollLeftButton = DSToolbarButton(symbol: "chevron.left", label: "Scroll tabs left",
+                                                   target: nil, action: nil)
+    private let scrollRightButton = DSToolbarButton(symbol: "chevron.right", label: "Scroll tabs right",
+                                                    target: nil, action: nil)
+    private let listButton = NSButton()
+
+    /// Called when the list button is pressed, with the button to anchor a menu.
+    public var onShowTabList: ((NSView) -> Void)?
 
     public static let rowHeight = DS.Metric.tabStrip
     public static let railWidth: CGFloat = 190
     public static let railRowHeight: CGFloat = 24
+    /// Fixed sizes for the scroll affordances. Reading their frames while the
+    /// strip is being laid out gives zero, which lets a tab slide underneath.
+    static let chevronWidth: CGFloat = 22
+    static let listButtonWidth: CGFloat = 52
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -76,11 +94,44 @@ public final class DocumentTabStrip: NSView {
         scrollView.documentView = contentView
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(scrollView)
+        // The scroll view is inset from the edges when the affordances appear.
+        // Content insets alone only shift the content; the tabs still draw
+        // under the chevrons.
+        scrollLeading = scrollView.leadingAnchor.constraint(equalTo: leadingAnchor)
+        scrollTrailing = scrollView.trailingAnchor.constraint(equalTo: trailingAnchor)
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: topAnchor),
-            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scrollLeading,
+            scrollTrailing,
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+
+        scrollLeftButton.target = self
+        scrollLeftButton.action = #selector(scrollLeft)
+        scrollRightButton.target = self
+        scrollRightButton.action = #selector(scrollRight)
+
+        listButton.bezelStyle = .inline
+        listButton.font = DS.Font.small()
+        listButton.target = self
+        listButton.action = #selector(showList)
+        listButton.setAccessibilityLabel("Show all documents")
+
+        for control in [scrollLeftButton as NSView, listButton, scrollRightButton] {
+            control.isHidden = true
+            control.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(control)
+        }
+        NSLayoutConstraint.activate([
+            listButton.widthAnchor.constraint(equalToConstant: Self.listButtonWidth),
+            scrollLeftButton.leadingAnchor.constraint(equalTo: leadingAnchor),
+            scrollLeftButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            scrollLeftButton.widthAnchor.constraint(equalToConstant: Self.chevronWidth),
+            scrollRightButton.widthAnchor.constraint(equalToConstant: Self.chevronWidth),
+            scrollRightButton.trailingAnchor.constraint(equalTo: listButton.leadingAnchor),
+            scrollRightButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            listButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -DS.Space.xs),
+            listButton.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
 
         setAccessibilityRole(.tabGroup)
@@ -182,8 +233,46 @@ public final class DocumentTabStrip: NSView {
         contentView.frame = NSRect(x: 0, y: 0, width: max(x, bounds.width), height: Self.rowHeight)
         scrollView.contentView.scroll(to: NSPoint(x: min(scrollView.contentView.bounds.origin.x,
                                                         max(0, x - bounds.width)), y: 0))
+        updateScrollAffordances(contentWidth: x)
         scrollToActive()
     }
+
+    /// Shows the chevrons and the "n / total" button only when the tabs do not
+    /// all fit, and insets the scroll view so they never cover a tab.
+    private func updateScrollAffordances(contentWidth: CGFloat) {
+        let overflows = tabLayout == .horizontal && contentWidth > bounds.width
+        isScrolling = overflows
+        listButton.title = "\(activeIndexInItems + 1) / \(items.count)"
+        for control in [scrollLeftButton as NSView, listButton, scrollRightButton] {
+            control.isHidden = !overflows
+        }
+        let leading = overflows ? Self.chevronWidth : 0
+        let trailing = overflows ? Self.chevronWidth + Self.listButtonWidth : 0
+        if scrollLeading.constant != leading || scrollTrailing.constant != -trailing {
+            scrollLeading.constant = leading
+            scrollTrailing.constant = -trailing
+            needsLayout = true
+        }
+    }
+
+    /// Whether the strip is currently in scroll mode.
+    public private(set) var isScrolling = false
+
+    private var activeIndexInItems: Int {
+        items.firstIndex(where: { $0.isActive }) ?? 0
+    }
+
+    @objc private func scrollLeft() { scrollBy(-bounds.width / 2) }
+    @objc private func scrollRight() { scrollBy(bounds.width / 2) }
+
+    private func scrollBy(_ delta: CGFloat) {
+        let maximum = max(0, contentView.frame.width - bounds.width)
+        let target = min(max(0, scrollView.contentView.bounds.origin.x + delta), maximum)
+        scrollView.contentView.scroll(to: NSPoint(x: target, y: 0))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+
+    @objc private func showList() { onShowTabList?(listButton) }
 
     /// Wrapped: genuine rows. The strip grows downward and the editor shrinks;
     /// a tab never jumps rows on activation, only on reorder.

@@ -211,3 +211,39 @@ final class ResponsiveLayoutTests: XCTestCase {
         }
     }
 }
+
+/// The strip only shows its scroll affordances when it genuinely overflows.
+@MainActor
+final class TabScrollAffordanceTests: XCTestCase {
+    private func strip(tabs count: Int, width: CGFloat) -> DocumentTabStrip {
+        let strip = DocumentTabStrip()
+        strip.frame = NSRect(x: 0, y: 0, width: width, height: DocumentTabStrip.rowHeight)
+        strip.configure(items: (1...count).map {
+            DSTabItem(title: "document \($0).swift", isActive: $0 == 1)
+        })
+        strip.layoutSubtreeIfNeeded()
+        return strip
+    }
+
+    func testAFewTabsNeedNoChevrons() {
+        XCTAssertFalse(strip(tabs: 3, width: 900).isScrolling)
+    }
+
+    func testManyTabsSwitchToScrollMode() {
+        XCTAssertTrue(strip(tabs: 40, width: 900).isScrolling,
+                      "40 tabs cannot fit in 900 pt, so the strip scrolls")
+    }
+
+    /// The chevrons and the list button are hidden when they would be useless.
+    func testTheAffordancesAppearOnlyWhenScrolling() {
+        let roomy = strip(tabs: 3, width: 1440)
+        let crowded = strip(tabs: 40, width: 900)
+
+        func visibleControls(_ view: NSView) -> Int {
+            view.subviews.filter { !($0 is NSScrollView) && !$0.isHidden }.count
+        }
+        XCTAssertEqual(visibleControls(roomy), 0)
+        XCTAssertGreaterThanOrEqual(visibleControls(crowded), 3,
+                                    "two chevrons and the list button")
+    }
+}

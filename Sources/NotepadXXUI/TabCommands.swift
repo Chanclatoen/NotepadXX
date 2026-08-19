@@ -179,3 +179,26 @@ extension MainWindowController {
         }
     }
 }
+
+extension MainWindowController {
+    /// Lists every open document under the tab strip's list button, marking the
+    /// active one. This is how a scrolled-away tab stays reachable.
+    func showTabListMenu(from anchor: NSView) {
+        let menu = NSMenu()
+        for (index, tab) in tabs.enumerated() {
+            let item = NSMenuItem(title: tab.document.displayName,
+                                  action: #selector(selectTabFromListAction(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = index
+            item.state = index == activeIndex ? .on : .off
+            if tab.document.isDirty { item.title += " — Edited" }
+            menu.addItem(item)
+        }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: anchor.bounds.height), in: anchor)
+    }
+
+    @objc func selectTabFromListAction(_ sender: Any?) {
+        guard let item = sender as? NSMenuItem else { return }
+        selectTab(at: item.tag)
+    }
+}

@@ -151,6 +151,9 @@ public final class MainWindowController: NSWindowController {
         tabBar = DocumentTabStrip()
         tabBar.onSelect = { [weak self] index in self?.activate(index: index) }
         tabBar.onClose = { [weak self] index in self?.close(index: index) }
+        // The "n / total" button lists every document, so one that has
+        // scrolled out of sight is still one click away.
+        tabBar.onShowTabList = { [weak self] anchor in self?.showTabListMenu(from: anchor) }
         tabBar.onReorder = { [weak self] from, to in self?.moveTab(from: from, to: to) }
         tabBar.onContextMenu = { [weak self] index, point in
             self?.showTabContextMenu(forTabAt: index, at: point)
