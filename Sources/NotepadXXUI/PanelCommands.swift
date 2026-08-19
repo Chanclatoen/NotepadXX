@@ -115,8 +115,24 @@ extension MainWindowController {
         picker.canChooseFiles = false
         picker.prompt = "Open as Workspace"
         guard picker.runModal() == .OK, let url = picker.url else { return }
+        openWorkspace(at: url)
+    }
+
+    /// Opens a folder as the workspace, and with it the panel arrangement that
+    /// belongs to that folder.
+    public func openWorkspace(at url: URL) {
         folderWorkspacePanel?.addRoot(url)
+        // Panel layout is remembered per workspace: the arrangement that suits
+        // one project is rarely the one that suits the next.
+        dockHost?.workspaceIdentifier = Self.workspaceKey(for: url)
         dockHost?.show("folderWorkspace")
+    }
+
+    /// A stable key for a folder, safe to use in a defaults key.
+    static func workspaceKey(for url: URL) -> String {
+        url.standardizedFileURL.path
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: " ", with: "-")
     }
 
     /// Refreshes panels that depend on the active document.

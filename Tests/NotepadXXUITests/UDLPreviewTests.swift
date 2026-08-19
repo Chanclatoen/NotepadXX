@@ -65,3 +65,59 @@ final class UDLPreviewTests: XCTestCase {
         XCTAssertNil(saved, "nothing is applied until Save")
     }
 }
+
+/// "Six sections, one language." The form was one long scroll, which buried
+/// the keywords most edits are about.
+@MainActor
+final class UDLSectionTests: XCTestCase {
+    private func makeEditor() -> UDLEditorWindowController {
+        let controller = UDLEditorWindowController(editing: nil,
+                                                   registry: LanguageRegistry.shared) { _ in }
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        return controller
+    }
+
+    private func descendants(of view: NSView) -> [NSView] {
+        view.subviews + view.subviews.flatMap { descendants(of: $0) }
+    }
+
+    func testTheDesignsSixSectionsArePresent() {
+        XCTAssertEqual(UDLEditorWindowController.Section.allCases.map(\.title),
+                       ["General", "Keywords", "Comments & Numbers", "Operators",
+                        "Folding", "Styling"])
+    }
+
+    func testItOpensOnGeneral() {
+        XCTAssertEqual(makeEditor().section, .general)
+    }
+
+    /// Each section shows its own controls, and only those.
+    func testSwitchingSectionsChangesWhatIsShown() throws {
+        let controller = makeEditor()
+        let content = try XCTUnwrap(controller.window?.contentView)
+
+        controller.showSection(.general)
+        content.layoutSubtreeIfNeeded()
+        let generalLabels = descendants(of: content).compactMap { ($0 as? NSTextField)?.stringValue }
+        XCTAssertTrue(generalLabels.contains { $0.hasPrefix("Name") }, "General shows the name")
+
+        controller.showSection(.folding)
+        content.layoutSubtreeIfNeeded()
+        let foldingLabels = descendants(of: content).compactMap { ($0 as? NSTextField)?.stringValue }
+        XCTAssertTrue(foldingLabels.contains { $0.hasPrefix("Fold open") }, "Folding shows fold rules")
+        XCTAssertFalse(foldingLabels.contains { $0.hasPrefix("Name") },
+                       "and not the ones belonging to another section")
+    }
+
+    /// The preview stays visible whichever section is showing.
+    func testThePreviewSurvivesASectionChange() throws {
+        let controller = makeEditor()
+        let content = try XCTUnwrap(controller.window?.contentView)
+        for section in UDLEditorWindowController.Section.allCases {
+            controller.showSection(section)
+            content.layoutSubtreeIfNeeded()
+            XCTAssertFalse(descendants(of: content).compactMap { $0 as? UDLPreviewView }.isEmpty,
+                           "the preview vanished on \(section.title)")
+        }
+    }
+}

@@ -169,3 +169,80 @@ final class DockLayoutPersistenceTests: XCTestCase {
         XCTAssertFalse(second.isVisible("left"))
     }
 }
+
+/// "The dock target is remembered per workspace." The arrangement that suits
+/// one project is rarely the one that suits the next.
+@MainActor
+final class PerWorkspaceDockTests: XCTestCase {
+    private let keys = ["NotepadXX.DockLayout",
+                        "NotepadXX.DockLayout._tmp_project-a",
+                        "NotepadXX.DockLayout._tmp_project-b"]
+
+    override func setUp() {
+        super.setUp()
+        keys.forEach { UserDefaults.standard.removeObject(forKey: $0) }
+    }
+
+    override func tearDown() {
+        keys.forEach { UserDefaults.standard.removeObject(forKey: $0) }
+        super.tearDown()
+    }
+
+    private final class StubPanel: NSObject, DockablePanel {
+        let panelIdentifier: String
+        let panelTitle = "Stub"
+        let preferredPosition: DockPosition
+        let contentView = NSView()
+        init(_ identifier: String, at position: DockPosition) {
+            panelIdentifier = identifier
+            preferredPosition = position
+        }
+    }
+
+    private func host() -> DockHostView {
+        let host = DockHostView(frame: NSRect(x: 0, y: 0, width: 1000, height: 700))
+        host.register(StubPanel("searchResults", at: .bottom))
+        host.register(StubPanel("functionList", at: .right))
+        host.layoutSubtreeIfNeeded()
+        return host
+    }
+
+    func testEachWorkspaceKeepsItsOwnArrangement() {
+        let first = host()
+        first.workspaceIdentifier = "_tmp_project-a"
+        first.show("searchResults")
+
+        let second = host()
+        second.workspaceIdentifier = "_tmp_project-b"
+        second.show("functionList")
+
+        // Reopening project A gets A's panels, not B's.
+        let reopened = host()
+        reopened.workspaceIdentifier = "_tmp_project-a"
+        XCTAssertTrue(reopened.isVisible("searchResults"))
+        XCTAssertFalse(reopened.isVisible("functionList"))
+    }
+
+    /// Switching workspace in one window swaps the arrangement over.
+    func testSwitchingWorkspaceSwapsTheLayout() {
+        let host = host()
+        host.workspaceIdentifier = "_tmp_project-a"
+        host.show("searchResults")
+
+        host.workspaceIdentifier = "_tmp_project-b"
+        XCTAssertFalse(host.isVisible("searchResults"),
+                       "project B's layout is not project A's")
+
+        host.show("functionList")
+        host.workspaceIdentifier = "_tmp_project-a"
+        XCTAssertTrue(host.isVisible("searchResults"), "and switching back restores A's")
+        XCTAssertFalse(host.isVisible("functionList"))
+    }
+
+    /// A folder is turned into a key that is safe to store.
+    func testWorkspaceKeysAreDerivedFromThePath() {
+        let key = MainWindowController.workspaceKey(for: URL(fileURLWithPath: "/tmp/my project"))
+        XCTAssertFalse(key.contains("/"))
+        XCTAssertFalse(key.contains(" "))
+    }
+}

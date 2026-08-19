@@ -89,7 +89,8 @@ public final class PluginsAdminWindowController: NSWindowController {
         buttons.spacing = 8
 
         let content = NSView()
-        for subview in [tabControl, searchField, scroll, footnote, buttons] {
+        stateBanner.isHidden = true
+        for subview in [tabControl, searchField, stateBanner, scroll, footnote, buttons] {
             subview.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(subview)
         }
@@ -99,7 +100,10 @@ public final class PluginsAdminWindowController: NSWindowController {
             searchField.centerYAnchor.constraint(equalTo: tabControl.centerYAnchor),
             searchField.leadingAnchor.constraint(equalTo: tabControl.trailingAnchor, constant: 12),
             searchField.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12),
-            scroll.topAnchor.constraint(equalTo: tabControl.bottomAnchor, constant: 12),
+            stateBanner.topAnchor.constraint(equalTo: tabControl.bottomAnchor, constant: 12),
+            stateBanner.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12),
+            stateBanner.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12),
+            scroll.topAnchor.constraint(equalTo: stateBanner.bottomAnchor, constant: 12),
             scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12),
             scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12),
             scroll.bottomAnchor.constraint(equalTo: footnote.topAnchor, constant: -10),
@@ -122,26 +126,43 @@ public final class PluginsAdminWindowController: NSWindowController {
     @objc private func tabChanged() {
         tableView.reloadData()
         updateStatus()
+        showRestingState()
     }
 
     @objc private func refreshTapped() {
         registry.reload()
         guard let repository else { tableView.reloadData(); onChange(); return }
 
-        statusLabel.stringValue = "Refreshing…"
+        // The Installed tab stays usable while the catalogue loads.
+        stateBanner.show(.init(
+            severity: .working,
+            title: "Loading the catalogue",
+            message: "Contacting the plug-in repository. Installed plug-ins stay usable "
+                + "while this runs."))
         Task { @MainActor in
             let failures = await repository.refresh()
             self.tableView.reloadData()
             self.updateStatus()
-            if !failures.isEmpty {
-                // Say which source failed rather than silently showing nothing.
-                self.statusLabel.stringValue = "\(failures.count) source(s) unavailable"
+            if failures.isEmpty {
+                self.showRestingState()
+            } else {
+                // A repository that cannot be reached is not a broken app:
+                // what is installed keeps working.
+                self.stateBanner.show(.init(
+                    severity: .warning,
+                    title: "Plug-in list unavailable",
+                    message: "\(failures.count) source\(failures.count == 1 ? "" : "s") could not be "
+                        + "reached. Installed plug-ins keep working and can still be enabled or removed.",
+                    actions: [("Retry", { [weak self] in self?.refreshTapped() }),
+                              ("Work Offline", { [weak self] in self?.stateBanner.show(nil) })]))
             }
             self.onChange()
         }
     }
 
     private let footnote = NSTextField(labelWithString: "")
+    /// What the window is doing, or why it cannot: the design's five states.
+    let stateBanner = DSStateBanner()
 
     /// Each tab carries its own count, so the work waiting in Updates is
     /// visible without opening it.
@@ -226,22 +247,73 @@ public final class PluginsAdminWindowController: NSWindowController {
         guard rows.indices.contains(tableView.selectedRow) else { return }
         let listing = rows[tableView.selectedRow]
 
-        statusLabel.stringValue = "Installing \(listing.name)…"
+        stateBanner.show(.init(
+            severity: .working,
+            title: "Installing \(listing.name) \(listing.version)",
+            message: "Downloading and verifying against the catalogue's checksum.",
+            progress: 0.1,
+            actions: [("Cancel", { [weak self] in self?.showRestingState() })]))
+
         Task { @MainActor in
             do {
                 _ = try await repository.install(listing, into: self.registry.pluginsDirectory)
                 self.registry.reload()
                 self.tableView.reloadData()
                 self.updateStatus()
+                self.stateBanner.show(.init(
+                    severity: .success,
+                    title: "\(listing.name) installed",
+                    message: "It becomes available after the next relaunch.",
+                    actions: [("Relaunch", { [weak self] in self?.relaunchTapped() })]))
                 self.onChange()
             } catch {
-                let alert = NSAlert()
-                alert.messageText = "Could not install \(listing.name)"
-                alert.informativeText = Self.describe(error)
-                alert.runModal()
+                self.showInstallFailure(error, listing: listing)
                 self.updateStatus()
             }
         }
+    }
+
+    /// A failed install, reported in the banner rather than an alert — it
+    /// belongs to this window and the detail matters.
+    private func showInstallFailure(_ error: Error, listing: PluginListing) {
+        var detail: String?
+        var severity = DSStateBanner.Severity.error
+        var title = "Could not install \(listing.name)"
+
+        if case PluginRepository.RepositoryError.checksumMismatch(let expected, let actual) = error {
+            title = "Signature does not match"
+            // The two digests are the evidence; showing them is the point.
+            detail = "expected sha256:\(Self.abbreviated(expected))\nreceived sha256:\(Self.abbreviated(actual))"
+        } else if case PluginRepository.RepositoryError.unreachable = error {
+            severity = .warning
+        }
+
+        stateBanner.show(.init(
+            severity: severity,
+            title: title,
+            message: Self.describe(error) + " Nothing was installed.",
+            detail: detail,
+            actions: [("Dismiss", { [weak self] in self?.showRestingState() })]))
+    }
+
+    /// Long digests are unreadable in full and the ends are what differ.
+    static func abbreviated(_ digest: String) -> String {
+        guard digest.count > 12 else { return digest }
+        return "\(digest.prefix(4))…\(digest.suffix(4))"
+    }
+
+    /// The banner when nothing is happening: up to date, or nothing at all.
+    func showRestingState() {
+        guard tab == .updates, currentListings().isEmpty, repository != nil else {
+            stateBanner.show(nil)
+            return
+        }
+        // An empty Updates table says nothing; this says everything is current.
+        stateBanner.show(.init(
+            severity: .success,
+            title: "Everything is up to date",
+            message: "The Updates tab shows this instead of an empty table.",
+            actions: [("Check Again", { [weak self] in self?.refreshTapped() })]))
     }
 
     /// Plain-language errors: a checksum failure in particular needs to read as

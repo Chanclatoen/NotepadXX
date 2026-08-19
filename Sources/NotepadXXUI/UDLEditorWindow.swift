@@ -31,6 +31,31 @@ public final class UDLEditorWindowController: NSWindowController {
     /// Always visible, and repainted as the rules are typed.
     private let livePreview = UDLPreviewView()
 
+    /// The design's six sections. One language, six views of it — the form was
+    /// one long scroll before, which buried the keywords most edits are about.
+    enum Section: Int, CaseIterable {
+        case general, keywords, commentsAndNumbers, operators, folding, styling
+
+        var title: String {
+            switch self {
+            case .general: return "General"
+            case .keywords: return "Keywords"
+            case .commentsAndNumbers: return "Comments & Numbers"
+            case .operators: return "Operators"
+            case .folding: return "Folding"
+            case .styling: return "Styling"
+            }
+        }
+    }
+
+    private let sectionControl = NSSegmentedControl(
+        labels: Section.allCases.map(\.title), trackingMode: .selectOne, target: nil, action: nil)
+    private let sectionContainer = NSView()
+    private var sectionViews: [Section: NSView] = [:]
+
+    /// The section being shown.
+    private(set) var section: Section = .general
+
     public init(
         editing definition: LanguageDefinition? = nil,
         registry: LanguageRegistry = .shared,
@@ -145,8 +170,46 @@ public final class UDLEditorWindowController: NSWindowController {
         buttons.orientation = .horizontal
         buttons.spacing = 8
 
-        let root = NSStackView(views: [general, separator(), comments, separator(),
-                                       delimiters, separator(), keywordStack,
+        let folding = NSStackView(views: [
+            labelled("Fold open", foldOpenField),
+            labelled("Fold close", foldCloseField),
+        ])
+        folding.orientation = .vertical
+        folding.alignment = .leading
+        folding.spacing = 8
+
+        // A user-defined language takes its colours from the editor theme, so
+        // this section says where they come from rather than pretending to
+        // offer per-language styling the app does not have.
+        let stylingNote = NSTextField(labelWithString:
+            "Keyword groups are drawn with the editor theme's styles: group 1 as keywords, "
+            + "group 2 as types, group 3 as functions, group 4 as attributes.\n"
+            + "Change those colours in Preferences ▸ Appearance & Themes.")
+        stylingNote.font = DS.Font.body()
+        stylingNote.textColor = DS.Color.textSecondary
+        stylingNote.lineBreakMode = .byWordWrapping
+        stylingNote.maximumNumberOfLines = 4
+        stylingNote.preferredMaxLayoutWidth = 520
+        let styling = NSStackView(views: [stylingNote])
+        styling.orientation = .vertical
+        styling.alignment = .leading
+
+        sectionViews = [
+            .general: general,
+            .keywords: keywordStack,
+            .commentsAndNumbers: comments,
+            .operators: delimiters,
+            .folding: folding,
+            .styling: styling,
+        ]
+
+        sectionControl.selectedSegment = 0
+        sectionControl.target = self
+        sectionControl.action = #selector(sectionChanged)
+        sectionControl.setAccessibilityLabel("Language section")
+        sectionContainer.translatesAutoresizingMaskIntoConstraints = false
+
+        let root = NSStackView(views: [sectionControl, sectionContainer,
                                        previewHeading, livePreview,
                                        previewLabel, buttons])
         root.orientation = .vertical
@@ -160,9 +223,12 @@ public final class UDLEditorWindowController: NSWindowController {
             root.topAnchor.constraint(equalTo: content.topAnchor, constant: 16),
             root.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
             root.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
-            keywordStack.widthAnchor.constraint(equalTo: root.widthAnchor),
+            sectionControl.widthAnchor.constraint(equalTo: root.widthAnchor),
+            sectionContainer.widthAnchor.constraint(equalTo: root.widthAnchor),
+            sectionContainer.heightAnchor.constraint(greaterThanOrEqualToConstant: 190),
         ])
         window.contentView = content
+        showSection(.general)
         observeFields()
     }
 
@@ -195,6 +261,27 @@ public final class UDLEditorWindowController: NSWindowController {
     }
 
     /// Reads the form back into a definition.
+    @objc private func sectionChanged() {
+        showSection(Section(rawValue: sectionControl.selectedSegment) ?? .general)
+    }
+
+    /// Shows one section. The others are removed rather than hidden, so the
+    /// container takes the height of what is actually on screen.
+    func showSection(_ section: Section) {
+        self.section = section
+        sectionControl.selectedSegment = section.rawValue
+        sectionContainer.subviews.forEach { $0.removeFromSuperview() }
+        guard let view = sectionViews[section] else { return }
+        view.translatesAutoresizingMaskIntoConstraints = false
+        sectionContainer.addSubview(view)
+        NSLayoutConstraint.activate([
+            view.topAnchor.constraint(equalTo: sectionContainer.topAnchor),
+            view.leadingAnchor.constraint(equalTo: sectionContainer.leadingAnchor),
+            view.trailingAnchor.constraint(lessThanOrEqualTo: sectionContainer.trailingAnchor),
+            view.bottomAnchor.constraint(lessThanOrEqualTo: sectionContainer.bottomAnchor),
+        ])
+    }
+
     /// Watches every field, so the preview follows the rules as they are typed
     /// rather than waiting for a button.
     private func observeFields() {

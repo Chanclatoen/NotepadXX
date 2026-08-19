@@ -119,6 +119,10 @@ public enum DS {
         public static let success = dynamic(light: 0x0F8A63, dark: 0x34C48A)
         public static let warning = dynamic(light: 0xB25000, dark: 0xFFB340)
         public static let error = dynamic(light: 0xC1372E, dark: 0xFF6B5E)
+        /// Backgrounds for the state banners, from the design's own values.
+        public static let successTint = dynamic(light: 0xF3FAF4, dark: 0x1C2A20)
+        public static let warningTint = dynamic(light: 0xFFF8EC, dark: 0x2E2617)
+        public static let errorTint = dynamic(light: 0xFDF1F0, dark: 0x2E1D1B)
 
         public static let searchMatch = dynamic(light: 0xFFE9A6, dark: 0x5E5326)
         public static let currentMatch = dynamic(light: 0x9EE8C4, dark: 0x1F5B45)

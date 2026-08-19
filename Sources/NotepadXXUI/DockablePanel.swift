@@ -44,6 +44,25 @@ public final class DockHostView: NSView {
     private var floatingWindows: [String: NSPanel] = [:]
     private let defaultsKey = "NotepadXX.DockLayout"
 
+    /// The workspace this layout belongs to.
+    ///
+    /// The design remembers where a panel is docked *per workspace*: the panel
+    /// arrangement that suits one project is rarely the one that suits the
+    /// next. A nil workspace uses the shared layout, which is what a window
+    /// with no folder open gets.
+    public var workspaceIdentifier: String? {
+        didSet {
+            guard workspaceIdentifier != oldValue else { return }
+            restoreLayout()
+        }
+    }
+
+    /// Where this host's layout is stored: per workspace when there is one.
+    private var storageKey: String {
+        guard let workspaceIdentifier, !workspaceIdentifier.isEmpty else { return defaultsKey }
+        return "\(defaultsKey).\(workspaceIdentifier)"
+    }
+
     /// Where each panel is docked now, which may differ from its preference
     /// once the user has moved it.
     private var dockPositions: [String: DockPosition] = [:]
@@ -307,17 +326,28 @@ public final class DockHostView: NSView {
             layout.floatingFrames[identifier] = NSStringFromRect(window.frame)
         }
         guard let data = try? JSONEncoder().encode(layout) else { return }
-        UserDefaults.standard.set(data, forKey: defaultsKey)
+        UserDefaults.standard.set(data, forKey: storageKey)
     }
 
     public func restoreLayout() {
         acceptsSaves = true
-        guard let data = UserDefaults.standard.data(forKey: defaultsKey),
+        // Start from a clean slate: the previous workspace's panels are not
+        // this one's, and a workspace with nothing saved should open bare
+        // rather than inheriting whatever happened to be on screen.
+        isRestoring = true
+        for identifier in visibleIdentifiers { hide(identifier) }
+        for identifier in Array(floatingWindows.keys) { dock(identifier) }
+
+        // Fall back to the shared layout the first time a workspace is opened,
+        // so a new project starts from the arrangement already in use.
+        let data = UserDefaults.standard.data(forKey: storageKey)
+            ?? UserDefaults.standard.data(forKey: defaultsKey)
+        guard let data,
               let layout = try? JSONDecoder().decode(Layout.self, from: data) else {
+            isRestoring = false
             restoreLegacyLayout()
             return
         }
-        isRestoring = true
         dockPositions = layout.positions
         currentLeftWidth = layout.leftWidth
         currentRightWidth = layout.rightWidth
