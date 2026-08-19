@@ -62,6 +62,9 @@ extension MainWindowController {
             editor.caretWidth = CGFloat(preferences.caretWidth)
             editor.caretBlinks = preferences.caretBlinks
             editor.scrollsBeyondLastLine = preferences.scrollBeyondLastLine
+            editor.caretScrollMargin = preferences.caretScrollMargin
+            editor.copiesWholeLineWhenEmpty = preferences.copyWholeLineWhenNothingSelected
+            editor.trimsTrailingWhitespaceOnPaste = preferences.trimTrailingWhitespaceOnPaste
             editor.indentUsesSpaces = preferences.replaceTabsBySpaces
             editor.indentWidth = preferences.tabWidth
             editor.gutterView?.needsDisplay = true

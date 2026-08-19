@@ -96,6 +96,21 @@ public final class EditorViewController: NSViewController {
 
     /// Caret width in points, from Preferences.
     public var caretWidth: CGFloat = 1 { didSet { applyCaretAppearance() } }
+    /// How many lines stay visible above and below the caret. 0 lets the
+    /// caret sit against the edge, which is the system default.
+    public var caretScrollMargin = 0
+
+    /// Copies the whole line when nothing is selected.
+    public var copiesWholeLineWhenEmpty = true {
+        didSet { (textView as? NotepadTextView)?.copiesWholeLineWhenEmpty = copiesWholeLineWhenEmpty }
+    }
+    /// Strips trailing whitespace from pasted text.
+    public var trimsTrailingWhitespaceOnPaste = false {
+        didSet {
+            (textView as? NotepadTextView)?.trimsTrailingWhitespaceOnPaste = trimsTrailingWhitespaceOnPaste
+        }
+    }
+
     /// Closes brackets and quotes as they are typed.
     public var closeBracketsEnabled = false
     /// Closes XML and HTML tags when `>` is typed.
@@ -329,7 +344,7 @@ public final class EditorViewController: NSViewController {
         scrollView.drawsBackground = true
 
         // Empty on purpose — see the performance contract above.
-        textView = TextView(string: "", wrapLines: wrapLines)
+        textView = NotepadTextView(string: "", wrapLines: wrapLines)
         textView.delegate = self
         scrollView.documentView = textView
 
@@ -925,6 +940,32 @@ extension EditorViewController: @preconcurrency TextViewDelegate {
         onTextChange?(textView.string)
     }
 
+    /// Scrolls so the configured number of lines stays visible around the
+    /// caret. Without it the caret can sit on the last visible row with no
+    /// context below it.
+    private func applyCaretScrollMargin() {
+        guard caretScrollMargin > 0,
+              let layoutManager = textView.layoutManager,
+              let clipView = scrollView.contentView as NSClipView? else { return }
+        guard let caretLine = layoutManager.textLineForOffset(selectedRange.location) else { return }
+
+        let lineHeight = layoutManager.estimateLineHeight()
+        let margin = CGFloat(caretScrollMargin) * lineHeight
+        let visible = clipView.documentVisibleRect
+        let caretTop = caretLine.yPos
+        let caretBottom = caretLine.yPos + caretLine.height
+
+        var target = visible.origin.y
+        if caretTop - margin < visible.minY {
+            target = max(0, caretTop - margin)
+        } else if caretBottom + margin > visible.maxY {
+            target = caretBottom + margin - visible.height
+        }
+        guard abs(target - visible.origin.y) > 0.5 else { return }
+        clipView.scroll(to: NSPoint(x: visible.origin.x, y: max(0, target)))
+        scrollView.reflectScrolledClipView(clipView)
+    }
+
     public func textViewDidChangeSelection(_ textView: TextView) {
         // Keep the current-line highlight in the gutter in step with the caret.
         if let highlighter {
@@ -934,6 +975,7 @@ extension EditorViewController: @preconcurrency TextViewDelegate {
         // A new cursor view is built when the caret moves, so the width has to
         // be re-applied to it.
         applyCaretWidth()
+        applyCaretScrollMargin()
         onSelectionChange?(selectedRange)
     }
 }

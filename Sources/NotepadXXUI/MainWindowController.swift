@@ -705,6 +705,13 @@ public final class MainWindowController: NSWindowController {
             return true
         }
         guard let document = try? TextDocument.load(contentsOf: url) else { return false }
+        // A very large file opens view-only: folding and search still work, but
+        // an accidental keystroke cannot start rewriting a 500 MB log.
+        if let limit = preferencesStore?.preferences.readOnlyAboveMegabytes, limit > 0,
+           let size = try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int,
+           size > limit * 1_048_576 {
+            document.isReadOnly = true
+        }
         appendDocument(document)
         noteRecentlyOpened(url)
         return true

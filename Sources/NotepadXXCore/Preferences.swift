@@ -34,11 +34,15 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var caretWidth: Int = 1
     public var edgeColumn: Int = 0          // 0 disables the vertical edge guide
     public var scrollBeyondLastLine: Bool = false
+    /// Lines kept visible above and below the caret while scrolling.
+    public var caretScrollMargin: Int = 0
+    public var copyWholeLineWhenNothingSelected: Bool = true
 
     // MARK: - Indentation
     public var tabWidth: Int = 4
     public var replaceTabsBySpaces: Bool = false
     public var autoIndent: Bool = true
+    public var trimTrailingWhitespaceOnPaste: Bool = false
 
     // MARK: - New document defaults
     public var defaultEncodingRawValue: UInt = String.Encoding.utf8.rawValue
@@ -54,6 +58,8 @@ public struct Preferences: Codable, Equatable, Sendable {
 
     // MARK: - File status
     public var detectFileChanges: Bool = true
+    /// Files larger than this open view-only. 0 disables the limit.
+    public var readOnlyAboveMegabytes: Int = 0
     public var reloadChangedFilesSilently: Bool = false
 
     // MARK: - Recent files
@@ -93,6 +99,8 @@ public struct Preferences: Codable, Equatable, Sendable {
         backupIntervalSeconds = min(max(1, backupIntervalSeconds), 600)
         autoCompletionMinimumCharacters = min(max(1, autoCompletionMinimumCharacters), 10)
         caretWidth = min(max(1, caretWidth), 5)
+        caretScrollMargin = min(max(0, caretScrollMargin), 40)
+        readOnlyAboveMegabytes = min(max(0, readOnlyAboveMegabytes), 4096)
         edgeColumn = max(0, edgeColumn)
     }
 }

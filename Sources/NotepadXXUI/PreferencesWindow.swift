@@ -178,6 +178,16 @@ public final class PreferencesWindowController: NSWindowController {
                         .toggles("Text", [("Wrap long lines", \.wordWrap),
                                           ("Allow scrolling past the last line", \.scrollBeyondLastLine),
                                           ("Open links on click", \.clickableURLs)]),
+                        .number("Keep visible", \.caretScrollMargin, range: 0...40),
+                    ]),
+                    Group("Clipboard", [
+                        .toggles("When copying", [
+                            ("Copy the whole line when nothing is selected",
+                             \.copyWholeLineWhenNothingSelected),
+                        ]),
+                        .toggles("When pasting", [
+                            ("Trim trailing whitespace", \.trimTrailingWhitespaceOnPaste),
+                        ]),
                     ]),
                  ]),
 
@@ -250,6 +260,9 @@ public final class PreferencesWindowController: NSWindowController {
                         .toggles("Watch", [("Open files, for external changes", \.detectFileChanges),
                                            ("Reload silently when there are no unsaved edits",
                                             \.reloadChangedFilesSilently)]),
+                    ]),
+                    Group("Large files", [
+                        .number("Read-only above (MB)", \.readOnlyAboveMegabytes, range: 0...4096),
                     ]),
                  ]),
 
