@@ -258,6 +258,15 @@ public final class MainWindowController: NSWindowController {
         untitledCounter += 1
         let document = TextDocument()
         document.untitledName = "new \(untitledCounter)"
+        // A new document starts in the format the user chose, rather than in
+        // whatever the type's defaults happen to be.
+        if let preferences = preferencesStore?.preferences {
+            document.encoding = FileEncoding(
+                String.Encoding(rawValue: preferences.defaultEncodingRawValue),
+                hasBOM: preferences.defaultEncodingHasBOM)
+            document.lineEnding = LineEnding(rawValue: preferences.defaultLineEndingRawValue) ?? .lf
+            document.languageName = preferences.defaultLanguageName
+        }
         tabs.append(EditorTab(document: document))
         activate(index: tabs.count - 1)
         refreshTabs()
@@ -317,6 +326,13 @@ public final class MainWindowController: NSWindowController {
 
     private func close(index: Int) {
         guard documents.indices.contains(index) else { return }
+        // Notepad++ keeps unsaved buffers by default, so this asks only when
+        // the user has said they want to be asked.
+        if preferencesStore?.preferences.confirmCloseUnsaved == true,
+           documents[index].isDirty,
+           !confirmDiscard(of: documents[index]) {
+            return
+        }
         let document = tabs.remove(at: index).document
         // Keep the editor alive if the same document is still open in the other
         // pane; discarding it would blank that pane.
@@ -329,6 +345,17 @@ public final class MainWindowController: NSWindowController {
             activate(index: min(index, documents.count - 1))
         }
         refreshTabs()
+    }
+
+    /// Asks before losing edits. Returns true when the close should continue.
+    private func confirmDiscard(of document: TextDocument) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "Close “\(document.displayName)” without saving?"
+        alert.informativeText = "Its unsaved edits will be lost."
+        alert.addButton(withTitle: "Close Without Saving")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.hasDestructiveAction = true
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     /// Refreshes tab titles and the status bar after an external change.

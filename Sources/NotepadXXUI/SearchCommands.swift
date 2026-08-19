@@ -79,6 +79,13 @@ extension MainWindowController {
            let restored = SearchPanelController.Mode(rawValue: stored) {
             panel.show(mode: restored)
         }
+        // Preferences supply what the panel opens with.
+        if let preferences = preferencesStore?.preferences {
+            panel.applyDefaults(
+                searchMode: SearchMode(rawValue: preferences.searchDefaultModeRawValue) ?? .normal,
+                wrapsAround: preferences.searchWrapAround,
+                closesAfterUse: !preferences.findDialogStaysOpen)
+        }
         installedFindPanel = panel
         return panel
     }

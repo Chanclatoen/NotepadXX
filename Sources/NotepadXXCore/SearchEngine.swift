@@ -1,7 +1,7 @@
 import Foundation
 
 /// The three search modes in Notepad++'s Find dialog.
-public enum SearchMode: Sendable {
+public enum SearchMode: String, CaseIterable, Sendable {
     case normal
     /// Literal text plus C-style escapes (\n, \t, \0, \xHH, \uHHHH, \\).
     case extended

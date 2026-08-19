@@ -30,7 +30,7 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var smartHighlight: Bool = true
     public var braceMatching: Bool = true
     public var clickableURLs: Bool = true
-    public var caretBlinkRate: Double = 0.6
+    public var caretBlinks: Bool = true
     public var caretWidth: Int = 1
     public var edgeColumn: Int = 0          // 0 disables the vertical edge guide
     public var scrollBeyondLastLine: Bool = false

@@ -59,6 +59,9 @@ final class SearchWorkflowTests: XCTestCase {
         let controller = make()
         controller.showFindPanelAction(nil)
         let panel = try! XCTUnwrap(controller.installedFindPanel)
+        // Start from a known mode: the panel opens in whichever mode the user's
+        // preferences name, which is not necessarily Normal.
+        panel.applyDefaults(searchMode: .normal, wrapsAround: true, closesAfterUse: false)
         XCTAssertEqual(panel.currentOptions.mode, .normal)
         controller.cycleSearchModeAction(nil)
         XCTAssertEqual(panel.currentOptions.mode, .extended)

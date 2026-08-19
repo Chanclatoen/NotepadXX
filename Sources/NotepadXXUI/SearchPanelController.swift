@@ -353,6 +353,21 @@ public final class SearchPanelController: NSWindowController {
         notifyPatternChanged()
     }
 
+    /// Whether the panel closes once a search has been run. Notepad++ can do
+    /// either; Preferences decides.
+    public var closesAfterUse = false
+
+    /// Applies the defaults the panel opens with.
+    public func applyDefaults(searchMode mode: SearchMode, wrapsAround: Bool, closesAfterUse: Bool) {
+        switch mode {
+        case .normal: searchMode.selectedSegment = 0
+        case .extended: searchMode.selectedSegment = 1
+        case .regex: searchMode.selectedSegment = 2
+        }
+        wrapAround.state = wrapsAround ? .on : .off
+        self.closesAfterUse = closesAfterUse
+    }
+
     /// ⌥⌘X cycles Normal → Extended → Regex, as the design specifies.
     public func cycleSearchMode() {
         searchMode.selectedSegment = (searchMode.selectedSegment + 1) % searchMode.segmentCount

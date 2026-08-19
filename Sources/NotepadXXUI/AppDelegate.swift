@@ -12,12 +12,21 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = MainMenu.build()
 
         let options = CommandLineOptions.parse(CommandLine.arguments)
-        sessionStore = try? SessionStore(directory: try! SessionStore.defaultDirectory())
+        // Snapshots go to the folder the user chose, when they chose one.
+        let supportDirectory = (try? SessionStore.defaultDirectory())
+            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        let preferencesForStartup = try? PreferencesStore(directory: supportDirectory)
+        let backupDirectory = preferencesForStartup?.preferences.backupDirectory
+            .map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
+        sessionStore = try? SessionStore(directory: backupDirectory ?? supportDirectory)
         windowController = MainWindowController()
 
         // Restore the previous session before showing the window, so the user
         // never sees an empty editor flash on launch.
-        let restored = options.noSession ? nil : sessionStore?.restoreDocuments()
+        // Preferences decide whether last time's documents return; --no-session
+        // overrides them for one launch.
+        let wantsSession = preferencesForStartup?.preferences.rememberSession ?? true
+        let restored = (options.noSession || !wantsSession) ? nil : sessionStore?.restoreDocuments()
         let documents = restored?.documents ?? []
         if !documents.isEmpty {
             windowController.adopt(documents: documents, activeIndex: restored?.activeIndex ?? 0)
@@ -144,8 +153,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Periodic snapshot so an abrupt termination loses at most a few seconds.
-        autosaveTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            self?.persistSession()
+        // Snapshot interval comes from Preferences; switching backups off stops
+        // the timer rather than leaving it running with nothing to do.
+        let store = windowController.preferencesStore?.preferences
+        if store?.periodicBackup ?? true {
+            let interval = TimeInterval(max(1, store?.backupIntervalSeconds ?? 5))
+            autosaveTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+                self?.persistSession()
+            }
         }
     }
 

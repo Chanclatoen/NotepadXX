@@ -22,7 +22,9 @@ public final class EditorViewController: NSViewController {
     /// Called when the caret or selection moves.
     public var onSelectionChange: ((NSRange) -> Void)?
 
-    private var wrapLines: Bool
+    /// Whether word wrap is on. Overlays need it to tell a soft break from a
+    /// real line ending.
+    public private(set) var wrapLines: Bool
 
     /// Syntax highlighting. Nil language means plain text.
     private var highlighter: SyntaxHighlighter?
@@ -73,13 +75,35 @@ public final class EditorViewController: NSViewController {
     /// Guards the auto-indent insertion from re-entering the change handler.
     private var isAutoIndenting = false
     /// Vertical guides at each indent level.
+    /// Notepad++'s "show wrap symbol": marks soft line breaks.
+    public var showWrapSymbol = false {
+        didSet {
+            wrapSymbolView?.isHidden = !showWrapSymbol
+            wrapSymbolView?.needsDisplay = true
+        }
+    }
+
+    /// Whether the view can scroll past the final line, so the last line can
+    /// be read at eye level rather than at the bottom edge.
+    public var scrollsBeyondLastLine = false {
+        didSet { applyScrollBeyondLastLine() }
+    }
+
+    /// Caret width in points, from Preferences.
+    public var caretWidth: CGFloat = 1 { didSet { applyCaretAppearance() } }
+    /// Whether the caret blinks. macOS owns the rate.
+    public var caretBlinks = true { didSet { applyCaretAppearance() } }
+
     public var showIndentGuides = true {
         didSet {
             indentGuideView?.isHidden = !showIndentGuides
             indentGuideView?.needsDisplay = true
+        wrapSymbolView?.needsDisplay = true
         }
     }
     private var indentGuideView: IndentGuideView?
+    private var wrapSymbolView: WrapSymbolView?
+    private var caretRefreshTimer: Timer?
 
     // MARK: - Autocomplete
     public let completionPopup = CompletionPopup()
@@ -279,6 +303,13 @@ public final class EditorViewController: NSViewController {
         indentGuideView = indentView
         container.addSubview(indentView, positioned: .above, relativeTo: scrollView)
 
+        let wrapView = WrapSymbolView()
+        wrapView.editor = self
+        wrapView.isHidden = !showWrapSymbol
+        wrapView.translatesAutoresizingMaskIntoConstraints = false
+        wrapSymbolView = wrapView
+        container.addSubview(wrapView, positioned: .above, relativeTo: scrollView)
+
         gutterWidthConstraint = widthConstraint
         NSLayoutConstraint.activate([
             guideView.topAnchor.constraint(equalTo: scrollView.topAnchor),
@@ -290,6 +321,11 @@ public final class EditorViewController: NSViewController {
             indentView.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor),
             indentView.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
             indentView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
+
+            wrapView.topAnchor.constraint(equalTo: scrollView.topAnchor),
+            wrapView.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor),
+            wrapView.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
+            wrapView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
 
             gutterView.topAnchor.constraint(equalTo: container.topAnchor),
             gutterView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
@@ -314,6 +350,7 @@ public final class EditorViewController: NSViewController {
     @objc private func viewportChanged() {
         gutterView?.needsDisplay = true
         indentGuideView?.needsDisplay = true
+        wrapSymbolView?.needsDisplay = true
         highlightVisibleRegion()
     }
 
@@ -446,6 +483,7 @@ public final class EditorViewController: NSViewController {
         updateGutterWidth()
         highlightVisibleRegion()
         indentGuideView?.needsDisplay = true
+        wrapSymbolView?.needsDisplay = true
         gutterView?.needsDisplay = true
     }
 
@@ -612,6 +650,59 @@ public final class EditorViewController: NSViewController {
         wrapLines = wrap
         textView.wrapLines = wrap
         scrollView.hasHorizontalScroller = !wrap
+        wrapSymbolView?.needsDisplay = true
+    }
+
+    /// The scroll view, so the effect of scroll-related settings can be
+    /// asserted rather than assumed.
+    public var scrollViewForTesting: NSScrollView { scrollView }
+
+    /// Applies the caret preferences.
+    ///
+    /// The text engine builds its cursor views itself and offers no width or
+    /// blink API, so the settings are applied to the views it installs. The
+    /// engine sets a cursor's height and origin when it repositions one but
+    /// never its width, so a width set here survives.
+    func applyCaretAppearance() {
+        caretRefreshTimer?.invalidate()
+        caretRefreshTimer = nil
+        applyCaretWidth()
+
+        guard !caretBlinks else { return }
+        // The engine blinks its own cursors on a fixed timer that cannot be
+        // reached from here. Re-showing them faster than it hides them keeps a
+        // non-blinking caret steady.
+        caretRefreshTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                for cursor in self.cursorViews() { cursor.isHidden = false }
+            }
+        }
+    }
+
+    /// Bottom inset of roughly a screenful, which is what "scroll past the
+    /// last line" means in an editor.
+    private func applyScrollBeyondLastLine() {
+        let inset = scrollsBeyondLastLine ? max(0, scrollView.contentSize.height - lineHeightEstimate() * 2) : 0
+        scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: inset, right: 0)
+    }
+
+    private func lineHeightEstimate() -> CGFloat {
+        textView.layoutManager?.estimateLineHeight() ?? 16
+    }
+
+    private func applyCaretWidth() {
+        for cursor in cursorViews() where cursor.frame.width != caretWidth {
+            cursor.frame.size.width = caretWidth
+        }
+    }
+
+    /// The engine's cursor views: thin, as tall as a line, and drawn above the
+    /// text. They are matched by class name because the type is internal to
+    /// the text engine.
+    private func cursorViews() -> [NSView] {
+        textView.subviews.filter { String(describing: type(of: $0)).contains("CursorView") }
     }
 
     /// The 0-based inclusive line range covered by the current selection.
@@ -749,6 +840,9 @@ extension EditorViewController: @preconcurrency TextViewDelegate {
             gutterView?.currentLine = highlighter.line(containing: selectedRange.location)
         }
         updateContextualEmphasis()
+        // A new cursor view is built when the caret moves, so the width has to
+        // be re-applied to it.
+        applyCaretWidth()
         onSelectionChange?(selectedRange)
     }
 }

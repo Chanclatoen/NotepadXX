@@ -10,6 +10,15 @@ import NotepadXXCore
 public final class PreferencesWindowController: NSWindowController {
 
     public enum Control {
+        /// The label shown beside the control.
+        public var label: String {
+            switch self {
+            case .toggle(let label, _), .text(let label, _): return label
+            case .number(let label, _, _), .decimal(let label, _, _): return label
+            case .choice(let label, _, _): return label
+            }
+        }
+
         case toggle(String, WritableKeyPath<Preferences, Bool>)
         case number(String, WritableKeyPath<Preferences, Int>, range: ClosedRange<Int>)
         case decimal(String, WritableKeyPath<Preferences, Double>, range: ClosedRange<Double>)
@@ -75,7 +84,7 @@ public final class PreferencesWindowController: NSWindowController {
                 .toggle("Scroll beyond last line", \.scrollBeyondLastLine),
                 .number("Vertical edge column (0 = off)", \.edgeColumn, range: 0...300),
                 .number("Caret width", \.caretWidth, range: 1...5),
-                .decimal("Caret blink rate (seconds)", \.caretBlinkRate, range: 0...2),
+                .toggle("Blink the caret", \.caretBlinks),
             ]),
             Page(title: "Show Symbol", controls: [
                 .toggle("Show white space", \.showWhitespace),

@@ -55,6 +55,11 @@ extension MainWindowController {
             editor.pathCompletionEnabled = preferences.pathCompletion
             editor.showCallTips = preferences.showCallTips
             editor.autoIndentEnabled = preferences.autoIndent
+            editor.showsCurrentLineHighlight = preferences.highlightCurrentLine
+            editor.showWrapSymbol = preferences.showWrapSymbol
+            editor.caretWidth = CGFloat(preferences.caretWidth)
+            editor.caretBlinks = preferences.caretBlinks
+            editor.scrollsBeyondLastLine = preferences.scrollBeyondLastLine
             editor.indentUsesSpaces = preferences.replaceTabsBySpaces
             editor.indentWidth = preferences.tabWidth
             editor.gutterView?.needsDisplay = true
