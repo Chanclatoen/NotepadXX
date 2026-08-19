@@ -20,23 +20,35 @@ extension MainWindowController {
     }
 
     func updateScrollSyncObservers() {
-        for observer in scrollSyncObservers { NotificationCenter.default.removeObserver(observer) }
+        for object in scrollSyncObservers {
+            NotificationCenter.default.removeObserver(
+                self, name: NSView.boundsDidChangeNotification, object: object
+            )
+        }
         scrollSyncObservers = []
         guard syncVerticalScroll || syncHorizontalScroll, isSplit else { return }
 
+        // Target/selector rather than a closure observer: capturing the editor
+        // in a nonisolated closure and using it on the main actor is a data
+        // race under Swift 6. An @objc method on this main-actor class avoids
+        // the capture entirely.
         for editor in visiblePaneEditors {
             let clip = editor.scrollView.contentView
             clip.postsBoundsChangedNotifications = true
-            let observer = NotificationCenter.default.addObserver(
-                forName: NSView.boundsDidChangeNotification, object: clip, queue: .main
-            ) { [weak self, weak editor] _ in
-                MainActor.assumeIsolated {
-                    guard let self, let editor else { return }
-                    self.mirrorScroll(from: editor)
-                }
-            }
-            scrollSyncObservers.append(observer)
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(paneDidScroll(_:)),
+                name: NSView.boundsDidChangeNotification, object: clip
+            )
+            scrollSyncObservers.append(clip)
         }
+    }
+
+    /// A pane scrolled; mirror it into the other one.
+    @objc func paneDidScroll(_ notification: Notification) {
+        guard let clip = notification.object as? NSClipView,
+              let source = visiblePaneEditors.first(where: { $0.scrollView.contentView === clip })
+        else { return }
+        mirrorScroll(from: source)
     }
 
     /// The editor showing in each pane, primary first.
