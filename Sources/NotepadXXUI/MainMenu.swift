@@ -23,6 +23,7 @@ public enum MainMenu {
         root.addItem(runMenu())
         root.addItem(pluginsMenu())
         root.addItem(windowMenu())
+        root.addItem(helpMenu())
         return root
     }
 
@@ -46,18 +47,42 @@ public enum MainMenu {
         return item
     }
 
+    /// The application menu macOS expects: About, Preferences, Services, the
+    /// three hide commands and Quit, in the standard order and with the
+    /// standard shortcuts. Anything else here would be a surprise.
     private static func applicationMenu() -> NSMenuItem {
         submenu("NotepadXX") { menu in
             menu.addItem(withTitle: "About NotepadXX",
                          action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
             menu.addItem(.separator())
+
+            add(menu, "Settings…", #selector(MainWindowController.showPreferencesAction(_:)), ",")
+            menu.addItem(.separator())
+
+            let services = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
+            let servicesMenu = NSMenu(title: "Services")
+            services.submenu = servicesMenu
+            menu.addItem(services)
+            NSApplication.shared.servicesMenu = servicesMenu
+            menu.addItem(.separator())
+
             let hide = menu.addItem(withTitle: "Hide NotepadXX",
                                     action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-            hide.target = NSApp
+            hide.target = NSApplication.shared
+            let hideOthers = menu.addItem(withTitle: "Hide Others",
+                                          action: #selector(NSApplication.hideOtherApplications(_:)),
+                                          keyEquivalent: "h")
+            hideOthers.keyEquivalentModifierMask = [.command, .option]
+            hideOthers.target = NSApplication.shared
+            let showAll = menu.addItem(withTitle: "Show All",
+                                       action: #selector(NSApplication.unhideAllApplications(_:)),
+                                       keyEquivalent: "")
+            showAll.target = NSApplication.shared
             menu.addItem(.separator())
+
             let quit = menu.addItem(withTitle: "Quit NotepadXX",
                                     action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-            quit.target = NSApp
+            quit.target = NSApplication.shared
         }
     }
 
@@ -86,7 +111,8 @@ public enum MainMenu {
             menu.addItem(.separator())
 
             menu.addItem(submenu("Line Operations") { sub in
-                add(sub, "Duplicate Current Line", #selector(MainWindowController.duplicateLinesAction(_:)), "d")
+                add(sub, "Duplicate Current Line", #selector(MainWindowController.duplicateLinesAction(_:)),
+                    "d", [.command, .shift])
                 add(sub, "Remove Current Line", #selector(MainWindowController.removeLinesAction(_:)))
                 add(sub, "Move Up Current Line", #selector(MainWindowController.moveLinesUpAction(_:)))
                 add(sub, "Move Down Current Line", #selector(MainWindowController.moveLinesDownAction(_:)))
@@ -140,7 +166,7 @@ public enum MainMenu {
             add(caretMenu, "Select All Occurrences",
                 #selector(MainWindowController.selectAllOccurrencesAction(_:)), "l", [.command, .shift])
             add(caretMenu, "Undo Last Caret",
-                #selector(MainWindowController.removeLastCaretAction(_:)), "u", [.command, .shift])
+                #selector(MainWindowController.removeLastCaretAction(_:)), "u", [.control, .shift])
             add(caretMenu, "Split Selection into Lines",
                 #selector(MainWindowController.splitSelectionIntoLinesAction(_:)))
             add(caretMenu, "Collapse to Single Caret",
@@ -159,7 +185,8 @@ public enum MainMenu {
             // Each item opens the same panel in its own mode, so there is one
             // search surface rather than a separate dialog per command.
             add(menu, "Find…", #selector(MainWindowController.showFindPanelAction(_:)), "f")
-            add(menu, "Replace…", #selector(MainWindowController.showReplacePanelAction(_:)), "h")
+            add(menu, "Replace…", #selector(MainWindowController.showReplacePanelAction(_:)),
+                "f", [.command, .option])
             add(menu, "Find in Files…", #selector(MainWindowController.showFindInFilesAction(_:)),
                 "f", [.command, .shift])
             add(menu, "Mark…", #selector(MainWindowController.showMarkPanelAction(_:)), "m", [.command, .shift])
@@ -259,8 +286,7 @@ public enum MainMenu {
             add(menu, "Project Panel", #selector(MainWindowController.toggleProjectPanelAction(_:)))
             add(menu, "Clipboard History", #selector(MainWindowController.toggleClipboardHistoryAction(_:)))
             add(menu, "Character Panel", #selector(MainWindowController.toggleCharacterPanelAction(_:)))
-            menu.addItem(.separator())
-            add(menu, "Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control])
+            add(menu, "Search Results", #selector(MainWindowController.toggleSearchResultsAction(_:)))
         }
     }
 
@@ -290,7 +316,8 @@ public enum MainMenu {
 
     private static func settingsMenu() -> NSMenuItem {
         submenu("Settings") { menu in
-            add(menu, "Preferences…", #selector(MainWindowController.showPreferencesAction(_:)), ",")
+            // Preferences itself is in the application menu, where macOS puts
+            // it. Repeating it here would be two names for one command.
             add(menu, "Shortcut Mapper…", #selector(MainWindowController.showShortcutMapperAction(_:)))
         }
     }
@@ -318,12 +345,33 @@ public enum MainMenu {
         }
     }
 
+    /// The Window menu macOS expects. Assigning it to `NSApp.windowsMenu` is
+    /// what makes the system keep the list of open windows in it.
     private static func windowMenu() -> NSMenuItem {
         submenu("Window") { menu in
-            add(menu, "Document Switcher", #selector(MainWindowController.showDocumentSwitcherAction(_:)), "\t", [.control])
             let minimise = menu.addItem(withTitle: "Minimize",
                                         action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
             minimise.keyEquivalentModifierMask = [.command]
+            menu.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+            menu.addItem(.separator())
+            add(menu, "Document Switcher",
+                #selector(MainWindowController.showDocumentSwitcherAction(_:)), "\t", [.control])
+            menu.addItem(.separator())
+            add(menu, "Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control])
+            menu.addItem(.separator())
+            menu.addItem(withTitle: "Bring All to Front",
+                         action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")
+            NSApplication.shared.windowsMenu = menu
+        }
+    }
+
+    /// Help. Assigning `helpMenu` is what puts macOS's own menu-search field
+    /// at the top of it. The items here are Help's own — repeating Settings'
+    /// commands under different names is what makes a menu bar confusing.
+    private static func helpMenu() -> NSMenuItem {
+        submenu("Help") { menu in
+            add(menu, "NotepadXX Help", #selector(MainWindowController.showHelpAction(_:)), "?")
+            NSApplication.shared.helpMenu = menu
         }
     }
 }

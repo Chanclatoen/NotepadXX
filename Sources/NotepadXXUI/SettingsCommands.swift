@@ -136,3 +136,11 @@ extension MainWindowController {
         return found
     }
 }
+
+extension MainWindowController {
+    /// Help opens the project page, which is where the documentation lives.
+    @objc public func showHelpAction(_ sender: Any?) {
+        guard let url = URL(string: "https://github.com/Chanclatoen/NotepadXX") else { return }
+        NSWorkspace.shared.open(url)
+    }
+}
