@@ -3,6 +3,9 @@ import AppKit
 /// One document's presentation in the tab strip.
 public struct DSTabItem: Equatable {
     public var title: String
+    /// Shown in dimmed secondary text after the name, for documents whose
+    /// names collide with another open one.
+    public var qualifier: String?
     public var isActive: Bool
     public var isDirty: Bool
     public var isPinned: Bool
@@ -13,11 +16,12 @@ public struct DSTabItem: Equatable {
     public var inSecondPane: Bool
     public var toolTip: String?
 
-    public init(title: String, isActive: Bool = false, isDirty: Bool = false,
+    public init(title: String, qualifier: String? = nil, isActive: Bool = false, isDirty: Bool = false,
                 isPinned: Bool = false, isReadOnly: Bool = false,
                 showsCloseButton: Bool = true, accent: NSColor? = nil,
                 inSecondPane: Bool = false, toolTip: String? = nil) {
         self.title = title
+        self.qualifier = qualifier
         self.isActive = isActive
         self.isDirty = isDirty
         self.isPinned = isPinned
@@ -183,6 +187,9 @@ public final class DocumentTabStrip: NSView {
         let titleWidth = (item.title as NSString)
             .size(withAttributes: [.font: DS.Font.dense()]).width
         var width = titleWidth + 24                      // padding
+        if let qualifier = item.qualifier {
+            width += (qualifier as NSString).size(withAttributes: [.font: DS.Font.small()]).width + 6
+        }
         if item.isPinned || item.isReadOnly { width += 16 }
         if item.isDirty { width += 12 }
         if item.showsCloseButton { width += 18 }
@@ -453,6 +460,19 @@ final class DSTabView: NSView {
         let size = title.size(withAttributes: attributes)
         let text = size.width <= available ? title : truncate(title, to: available, attributes: attributes)
         text.draw(at: NSPoint(x: x, y: centreY - size.height / 2), withAttributes: attributes)
+
+        // The folder, for a name that collides with another open document.
+        // Secondary text, so the name still reads as the name.
+        if let qualifier = item.qualifier {
+            let qualifierAttributes: [NSAttributedString.Key: Any] = [
+                .font: DS.Font.small(), .foregroundColor: DS.Color.textTertiary,
+            ]
+            let drawn = text.size(withAttributes: attributes).width
+            let origin = NSPoint(x: x + drawn + 5, y: centreY - size.height / 2 + 1)
+            if origin.x + 20 < bounds.width - trailing {
+                (qualifier as NSString).draw(at: origin, withAttributes: qualifierAttributes)
+            }
+        }
 
         // Dirty dot — paired with the accessibility description above.
         if item.isDirty {

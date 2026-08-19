@@ -21,12 +21,15 @@ public final class DSStatusBar: NSView {
         public var lineEndingShort: String
         public var encoding: String
         public var isOverwrite: Bool
+        /// "pane 1 of 2 · scroll linked" while a split is open; empty otherwise.
+        public var paneNote: String
 
         public init(documentType: String = "Normal text file", length: Int = 0, lines: Int = 1,
                     caretLine: Int = 1, caretColumn: Int = 1,
                     selectionCharacters: Int = 0, selectionLines: Int = 0, caretCount: Int = 1,
                     lineEnding: String = "Unix (LF)", lineEndingShort: String = "LF",
-                    encoding: String = "UTF-8", isOverwrite: Bool = false) {
+                    encoding: String = "UTF-8", isOverwrite: Bool = false,
+                    paneNote: String = "") {
             self.documentType = documentType
             self.length = length
             self.lines = lines
@@ -39,6 +42,7 @@ public final class DSStatusBar: NSView {
             self.lineEndingShort = lineEndingShort
             self.encoding = encoding
             self.isOverwrite = isOverwrite
+            self.paneNote = paneNote
         }
     }
 
@@ -163,6 +167,11 @@ public final class DSStatusBar: NSView {
                 ? "Ln \(model.caretLine)  Col \(model.caretColumn)"
                 : "Ln \(model.caretLine)    Col \(model.caretColumn)    Sel \(model.selectionCharacters) | \(model.selectionLines)"
             caretSegment.textColor = DS.Color.textPrimary
+        }
+        // Which pane the caret is in, when there is more than one. Appended to
+        // the caret segment because it describes where the caret is.
+        if !model.paneNote.isEmpty, density != .compact {
+            caretSegment.text += "    \(model.paneNote)"
         }
         caretSegment.setFont(numeric)
 

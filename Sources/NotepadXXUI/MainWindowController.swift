@@ -27,6 +27,7 @@ public final class MainWindowController: NSWindowController {
     public var tabWidth: Int = 4
     var installedFindPanel: SearchPanelController?
     var installedGoToPanel: GoToPanelController?
+    var documentSwitcherMonitor: Any?
     var searchResultsPanel: SearchResultsPanel?
     var installedColumnEditor: ColumnEditorPanel?
     // View-menu display state, applied to every editor so it behaves like a
@@ -246,6 +247,7 @@ public final class MainWindowController: NSWindowController {
         ])
 
         content.onAppearanceChange = { [weak self] in self?.appearanceDidChange() }
+        installDocumentSwitcherShortcut()
         window.contentView = content
     }
 
@@ -402,10 +404,12 @@ public final class MainWindowController: NSWindowController {
     }
 
     private func refreshTabs() {
+        let qualifiers = Self.qualifiers(for: tabs.map(\.document))
         tabBar.configure(items: tabs.map { tab in
             let attributes = self.attributes(for: tab.document)
             return DSTabItem(
-                title: tab.document.displayName,
+                title: TabTitle.shortened(tab.document.displayName),
+                qualifier: qualifiers[ObjectIdentifier(tab.document)],
                 isActive: self.tabs.firstIndex(where: { $0.document === tab.document && $0.pane == tab.pane })
                     == self.activeIndex,
                 isDirty: tab.document.isDirty,
@@ -424,6 +428,24 @@ public final class MainWindowController: NSWindowController {
         }
         rebuildPanes()
         window?.title = documents.indices.contains(activeIndex) ? documents[activeIndex].displayName : "NotepadXX"
+    }
+
+    /// The folder shown beside a tab's name, for the documents whose names
+    /// collide. Only those: qualifying every tab would add noise to the ones
+    /// that were never ambiguous.
+    static func qualifiers(for documents: [TextDocument]) -> [ObjectIdentifier: String] {
+        var byName: [String: [TextDocument]] = [:]
+        for document in documents {
+            byName[document.displayName, default: []].append(document)
+        }
+        var result: [ObjectIdentifier: String] = [:]
+        for (_, colliding) in byName where colliding.count > 1 {
+            for document in colliding {
+                guard let url = document.fileURL else { continue }
+                result[ObjectIdentifier(document)] = url.deletingLastPathComponent().lastPathComponent
+            }
+        }
+        return result
     }
 
     private func refreshStatus() {
@@ -453,9 +475,19 @@ public final class MainWindowController: NSWindowController {
             lineEnding: document.lineEnding.displayName,
             lineEndingShort: document.lineEnding.shortName,
             encoding: document.encoding.displayName,
-            isOverwrite: isOverwriteMode
+            isOverwrite: isOverwriteMode,
+            paneNote: paneNote()
         ))
         refreshToolbarState()
+    }
+
+    /// "pane 1 of 2 · scroll linked" while a split is open, so the caret's
+    /// pane is never in doubt. Empty when there is only one pane.
+    private func paneNote() -> String {
+        guard isSplit, tabs.indices.contains(activeIndex) else { return "" }
+        let pane = tabs[activeIndex].pane + 1
+        let linked = syncVerticalScroll ? " · scroll linked" : ""
+        return "pane \(pane) of 2\(linked)"
     }
 
     /// Focuses an existing tab.

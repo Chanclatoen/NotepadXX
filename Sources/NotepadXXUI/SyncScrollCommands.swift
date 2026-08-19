@@ -167,6 +167,20 @@ extension MainWindowController {
         return known + rest
     }
 
+    /// ⌃⇥ walks the recency order, as it does on the rest of the system.
+    func installDocumentSwitcherShortcut() {
+        guard documentSwitcherMonitor == nil else { return }
+        documentSwitcherMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.window === self.window,
+                  event.keyCode == 48,
+                  event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .control else {
+                return event
+            }
+            self.showDocumentSwitcherAction(nil)
+            return nil
+        }
+    }
+
     @objc public func showDocumentSwitcherAction(_ sender: Any?) {
         guard tabs.count > 1 else { NSSound.beep(); return }
         if documentSwitcher == nil {

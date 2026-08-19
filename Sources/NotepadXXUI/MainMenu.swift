@@ -354,8 +354,10 @@ public enum MainMenu {
             minimise.keyEquivalentModifierMask = [.command]
             menu.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
             menu.addItem(.separator())
-            add(menu, "Document Switcher",
-                #selector(MainWindowController.showDocumentSwitcherAction(_:)), "\t", [.control])
+            // ⌃⇥ also opens it, handled as a key event: a menu item can carry
+            // only one shortcut, and the design gives the list both.
+            add(menu, "Open Documents…",
+                #selector(MainWindowController.showDocumentSwitcherAction(_:)), "o", [.command, .shift])
             menu.addItem(.separator())
             add(menu, "Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control])
             menu.addItem(.separator())
