@@ -135,7 +135,8 @@ final class MultiCaretStatusTests: XCTestCase {
 
         let text = labels(in: controller.statusBar)
         XCTAssertTrue(text.contains("3 carets"), "caret count shown, got: \(text)")
-        XCTAssertTrue(text.contains("Sel : 9"), "all three selections counted, got: \(text)")
+        // The design writes the status bar without colons: "Sel 9 | 3".
+        XCTAssertTrue(text.contains("Sel 9"), "all three selections counted, got: \(text)")
     }
 
     func testSingleCaretStillShowsLineAndColumn() {
@@ -148,7 +149,7 @@ final class MultiCaretStatusTests: XCTestCase {
         controller.refreshUI()
 
         let text = labels(in: controller.statusBar)
-        XCTAssertTrue(text.contains("Ln : 1"), "got: \(text)")
+        XCTAssertTrue(text.contains("Ln 1"), "got: \(text)")
         XCTAssertFalse(text.contains("carets"))
     }
 }

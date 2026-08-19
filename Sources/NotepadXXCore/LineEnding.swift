@@ -15,6 +15,15 @@ public enum LineEnding: String, CaseIterable, Sendable {
         }
     }
 
+    /// The abbreviated form the status bar falls back to when space is short.
+    public var shortName: String {
+        switch self {
+        case .lf: return "LF"
+        case .crlf: return "CRLF"
+        case .cr: return "CR"
+        }
+    }
+
     public static var platformDefault: LineEnding { .lf }
 
     /// Counts each terminator. CR and LF are only counted when they are *not*

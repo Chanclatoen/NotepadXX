@@ -96,6 +96,8 @@ public final class EditorViewController: NSViewController {
     public var onTextInserted: ((String) -> Void)?
     /// Called when a fold box in the gutter is clicked.
     public var onToggleFold: ((Int) -> Void)?
+    /// Clicking the bookmark lane toggles that line's bookmark, as in Notepad++.
+    public var onToggleBookmark: ((Int) -> Void)?
 
     /// Every caret or selection currently active.
     public var selectedRanges: [NSRange] {
@@ -251,6 +253,7 @@ public final class EditorViewController: NSViewController {
         gutterView = GutterView()
         gutterView.textView = textView
         gutterView.onToggleFold = { [weak self] line in self?.onToggleFold?(line) }
+        gutterView.onToggleBookmark = { [weak self] line in self?.onToggleBookmark?(line) }
 
         completionPopup.onCommit = { [weak self] text in self?.insertCompletion(text) }
 

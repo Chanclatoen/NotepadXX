@@ -1,4 +1,5 @@
 import AppKit
+import NotepadXXDesign
 import NotepadXXCore
 import NotepadXXEditor
 
@@ -17,8 +18,8 @@ public final class MainWindowController: NSWindowController {
     public var documents: [TextDocument] { tabs.map(\.document) }
     public private(set) var activeIndex: Int = 0
 
-    var tabBar: TabBarView!
-    var statusBar: StatusBarView!
+    var tabBar: DocumentTabStrip!
+    var statusBar: DSStatusBar!
     private var editorContainer: NSView!
     var editors: [UUID: EditorViewController] = [:]
     private var untitledCounter = 0
@@ -37,8 +38,12 @@ public final class MainWindowController: NSWindowController {
     var showChangeHistory = true
     var showIndentGuides = true
     var isOverwriteMode = false
-    var toolbar: ToolbarView!
+    var toolbar: DSToolbar!
     var tabBarHeightConstraint: NSLayoutConstraint?
+    var tabBarWidthConstraint: NSLayoutConstraint?
+    /// Constraints that differ between the top strip and the side rail.
+    var horizontalTabConstraints: [NSLayoutConstraint] = []
+    var verticalTabConstraints: [NSLayoutConstraint] = []
     var multiCaretMonitor: Any?
     var searchHistory: SearchHistory?
     var lastSearchOptions = SearchOptions()
@@ -137,16 +142,21 @@ public final class MainWindowController: NSWindowController {
         guard let window else { return }
         let content = NSView()
 
-        toolbar = ToolbarView()
-        toolbar.target = self
-        toolbar.configure(groups: ToolbarView.defaultGroups())
+        toolbar = DSToolbar()
+        toolbar.commandTarget = self
+        toolbar.configure(groups: ToolbarCatalogue.groups())
+        toolbar.bind(to: self)
 
-        tabBar = TabBarView()
+        tabBar = DocumentTabStrip()
         tabBar.onSelect = { [weak self] index in self?.activate(index: index) }
         tabBar.onClose = { [weak self] index in self?.close(index: index) }
         tabBar.onReorder = { [weak self] from, to in self?.moveTab(from: from, to: to) }
         tabBar.onContextMenu = { [weak self] index, point in
             self?.showTabContextMenu(forTabAt: index, at: point)
+        }
+        // Wrapped rows are genuine layout: the strip grows and the editor shrinks.
+        tabBar.onExtentChanged = { [weak self] height in
+            self?.tabBarHeightConstraint?.constant = height
         }
 
         let host = DockHostView()
@@ -171,36 +181,51 @@ public final class MainWindowController: NSWindowController {
             editorSplit.trailingAnchor.constraint(equalTo: host.editorContainer.trailingAnchor),
             editorSplit.bottomAnchor.constraint(equalTo: host.editorContainer.bottomAnchor),
         ])
-        statusBar = StatusBarView()
+        statusBar = DSStatusBar()
 
         for subview in [toolbar!, tabBar!, host as NSView, statusBar!] {
             subview.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(subview)
         }
 
-        let tabBarHeight = tabBar.heightAnchor.constraint(equalToConstant: 28)
+        let tabBarHeight = tabBar.heightAnchor.constraint(equalToConstant: DS.Metric.tabStrip)
         tabBarHeightConstraint = tabBarHeight
+        tabBarWidthConstraint = tabBar.widthAnchor.constraint(
+            equalToConstant: DocumentTabStrip.railWidth
+        )
         NSLayoutConstraint.activate([
             toolbar.topAnchor.constraint(equalTo: content.topAnchor),
             toolbar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             toolbar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            toolbar.heightAnchor.constraint(equalToConstant: 32),
 
+            statusBar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            statusBar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            statusBar.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+        ])
+
+        // Two arrangements. Horizontal and wrapped put the strip above the
+        // editor; the rail puts it beside, so these swap rather than stretch.
+        horizontalTabConstraints = [
             tabBar.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
             tabBar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             tabBar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
             tabBarHeight,
-
             host.topAnchor.constraint(equalTo: tabBar.bottomAnchor),
             host.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             host.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-
-            statusBar.topAnchor.constraint(equalTo: host.bottomAnchor),
-            statusBar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
-            statusBar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            statusBar.bottomAnchor.constraint(equalTo: content.bottomAnchor),
-            statusBar.heightAnchor.constraint(equalToConstant: 22),
-        ])
+            host.bottomAnchor.constraint(equalTo: statusBar.topAnchor),
+        ]
+        verticalTabConstraints = [
+            tabBar.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
+            tabBar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            tabBar.bottomAnchor.constraint(equalTo: statusBar.topAnchor),
+            tabBarWidthConstraint!,
+            host.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
+            host.leadingAnchor.constraint(equalTo: tabBar.trailingAnchor),
+            host.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            host.bottomAnchor.constraint(equalTo: statusBar.topAnchor),
+        ]
+        NSLayoutConstraint.activate(horizontalTabConstraints)
 
         // Dropping files onto the window opens them.
         let dropView = FileDropView()
@@ -260,6 +285,7 @@ public final class MainWindowController: NSWindowController {
             self.macroRecorder.record(.insertText(text))
         }
         controller.onToggleFold = { [weak self] line in self?.toggleFold(atLine: line) }
+        controller.onToggleBookmark = { [weak self] line in self?.toggleBookmark(atLine: line) }
         controller.completionEntries = completionData?.entries(
             forLanguage: document.languageName
         ) ?? []
@@ -348,13 +374,26 @@ public final class MainWindowController: NSWindowController {
     }
 
     private func refreshTabs() {
-        tabBar.configure(
-            titles: tabs.map { $0.document.displayName + ($0.pane == 1 ? " ⧉" : "") },
-            dirtyFlags: tabs.map { $0.document.isDirty },
-            selected: activeIndex,
-            pinned: tabs.map { attributes(for: $0.document).isPinned },
-            colours: tabs.map { colour(for: attributes(for: $0.document)) }
-        )
+        tabBar.configure(items: tabs.map { tab in
+            let attributes = self.attributes(for: tab.document)
+            return DSTabItem(
+                title: tab.document.displayName,
+                isActive: self.tabs.firstIndex(where: { $0.document === tab.document && $0.pane == tab.pane })
+                    == self.activeIndex,
+                isDirty: tab.document.isDirty,
+                isPinned: attributes.isPinned,
+                isReadOnly: tab.document.isReadOnly,
+                showsCloseButton: self.preferencesStore?.preferences.tabCloseButtonOnEachTab ?? true,
+                accent: self.colour(for: attributes),
+                inSecondPane: tab.pane == 1,
+                toolTip: tab.document.fileURL?.path ?? tab.document.displayName
+            )
+        })
+        if tabBar.tabLayout != .vertical {
+            tabBarHeightConstraint?.constant = tabBar.requiredExtent(
+                forWidth: window?.frame.width ?? DS.Metric.windowDefault.width
+            )
+        }
         rebuildPanes()
         window?.title = documents.indices.contains(activeIndex) ? documents[activeIndex].displayName : "NotepadXX"
     }
@@ -364,7 +403,6 @@ public final class MainWindowController: NSWindowController {
         let document = documents[activeIndex]
         let controller = editorController(for: document)
         let caret = controller.caretPosition()
-        let selection = controller.selectedRange
         // With several carets the totals span every selection, not just the
         // first, or the status bar under-reports what a keystroke will affect.
         let ranges = controller.selectedRanges
@@ -374,19 +412,21 @@ public final class MainWindowController: NSWindowController {
             .filter { $0.length > 0 && NSMaxRange($0) <= content.length }
             .map { content.substring(with: $0) }
             .joined(separator: "\n")
-        statusBar.update(
+
+        statusBar.update(DSStatusBar.Model(
             documentType: document.languageName ?? "Normal text file",
-            length: (document.text as NSString).length,
+            length: content.length,
             lines: document.text.isEmpty ? 1 : LineEnding.counts(in: document.text).lf + 1,
-            selection: totalSelected,
-            selectedLines: selectedText.isEmpty ? 0 : LineEnding.counts(in: selectedText).lf + 1,
-            line: caret.line,
-            column: caret.column,
+            caretLine: caret.line,
+            caretColumn: caret.column,
+            selectionCharacters: totalSelected,
+            selectionLines: selectedText.isEmpty ? 0 : LineEnding.counts(in: selectedText).lf + 1,
+            caretCount: ranges.count,
             lineEnding: document.lineEnding.displayName,
+            lineEndingShort: document.lineEnding.shortName,
             encoding: document.encoding.displayName,
-            isOverwrite: isOverwriteMode,
-            caretCount: ranges.count
-        )
+            isOverwrite: isOverwriteMode
+        ))
         refreshToolbarState()
     }
 
@@ -442,6 +482,20 @@ public final class MainWindowController: NSWindowController {
     func visiblePanelIdentifiers() -> [String] {
         ["functionList", "folderWorkspace", "clipboardHistory", "characterPanel", "documentMap", "projectPanel"]
             .filter { dockHost?.isVisible($0) == true }
+    }
+
+    /// Applies the constraint set for the current tab layout.
+    func applyTabLayoutConstraints() {
+        let vertical = tabBar.tabLayout == .vertical
+        NSLayoutConstraint.deactivate(vertical ? horizontalTabConstraints : verticalTabConstraints)
+        NSLayoutConstraint.activate(vertical ? verticalTabConstraints : horizontalTabConstraints)
+        if !vertical {
+            tabBarHeightConstraint?.constant = tabBar.requiredExtent(
+                forWidth: window?.frame.width ?? DS.Metric.windowDefault.width
+            )
+        }
+        tabBar.needsLayout = true
+        window?.contentView?.needsLayout = true
     }
 
     /// Sets the tab list without re-activating, for reordering.

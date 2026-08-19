@@ -1,4 +1,5 @@
 import AppKit
+import NotepadXXDesign
 import NotepadXXCore
 
 /// Tab management: reorder, pin, colour, sort, and the tab context menu.

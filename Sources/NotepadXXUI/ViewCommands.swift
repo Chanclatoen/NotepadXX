@@ -1,4 +1,5 @@
 import AppKit
+import NotepadXXDesign
 import NotepadXXCore
 
 /// View menu: display symbols, zoom, and bookmark navigation.
@@ -74,8 +75,13 @@ extension MainWindowController {
     // MARK: - Bookmarks
 
     @objc public func toggleBookmarkAction(_ sender: Any?) {
+        guard let editor = currentEditor else { return }
+        toggleBookmark(atLine: editor.caretPosition().line - 1)
+    }
+
+    /// 0-based. Used by the menu command and by clicking the gutter's bookmark lane.
+    public func toggleBookmark(atLine line: Int) {
         guard let editor = currentEditor, let document = activeDocument else { return }
-        let line = editor.caretPosition().line - 1
         var marks = bookmarks[document.id] ?? Bookmarks()
         marks.toggle(line)
         bookmarks[document.id] = marks
@@ -133,14 +139,15 @@ extension MainWindowController {
     // MARK: - Tab bar layout
 
     @objc public func useHorizontalTabsAction(_ sender: Any?) { setTabLayout(.horizontal) }
-    @objc public func useMultiLineTabsAction(_ sender: Any?) { setTabLayout(.multiLine) }
+    @objc public func useMultiLineTabsAction(_ sender: Any?) { setTabLayout(.wrapped) }
     @objc public func useVerticalTabsAction(_ sender: Any?) { setTabLayout(.vertical) }
 
-    func setTabLayout(_ layout: TabBarView.Layout) {
-        tabBar.layout = layout
-        tabBarHeightConstraint?.constant = tabBar.requiredExtent(
-            tabCount: tabs.count, availableWidth: window?.frame.width ?? 1100
-        )
+    /// The rail is a genuinely different arrangement: it sits beside the editor
+    /// rather than above it, so the constraints swap with the layout.
+    public func setTabLayout(_ layout: DocumentTabStrip.Layout) {
+        tabBar.tabLayout = layout
+        applyTabLayoutConstraints()
+        try? preferencesStore?.update { $0.tabLayoutRawValue = layout.rawValue }
         refreshUI()
     }
 

@@ -14,17 +14,19 @@ let package = Package(
         .package(url: "https://github.com/CodeEditApp/CodeEditTextView.git", from: "0.12.0"),
     ],
     targets: [
+        .target(name: "NotepadXXDesign"),
         .target(name: "NotepadXXCore"),
         .target(
             name: "NotepadXXEditor",
             dependencies: [
                 "NotepadXXCore",
+                "NotepadXXDesign",
                 .product(name: "CodeEditTextView", package: "CodeEditTextView"),
             ]
         ),
-        .target(name: "NotepadXXUI", dependencies: ["NotepadXXCore", "NotepadXXEditor"]),
+        .target(name: "NotepadXXUI", dependencies: ["NotepadXXCore", "NotepadXXEditor", "NotepadXXDesign"]),
         .executableTarget(name: "NotepadXX", dependencies: ["NotepadXXUI"]),
         .testTarget(name: "NotepadXXCoreTests", dependencies: ["NotepadXXCore"]),
-        .testTarget(name: "NotepadXXUITests", dependencies: ["NotepadXXUI", "NotepadXXCore"]),
+        .testTarget(name: "NotepadXXUITests", dependencies: ["NotepadXXUI", "NotepadXXCore", "NotepadXXDesign"]),
     ]
 )

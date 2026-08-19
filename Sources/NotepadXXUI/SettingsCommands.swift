@@ -1,4 +1,5 @@
 import AppKit
+import NotepadXXDesign
 import NotepadXXCore
 
 /// Settings menu: Preferences, Style Configurator and the Shortcut Mapper.
@@ -61,6 +62,11 @@ extension MainWindowController {
                 editor.applyTheme(theme)
             }
         }
+        if let layout = DocumentTabStrip.Layout(rawValue: preferences.tabLayoutRawValue),
+           layout != tabBar.tabLayout {
+            tabBar.tabLayout = layout
+            applyTabLayoutConstraints()
+        }
         statusBar.isHidden = !preferences.showStatusBar
         tabBar.isHidden = !preferences.showTabBar
         toolbar.isHidden = !preferences.showToolbar
@@ -69,12 +75,14 @@ extension MainWindowController {
 
     /// Themes the toolbar, tab bar and status bar to match the editor, so the
     /// window reads as one surface rather than a light editor in dark chrome.
+    /// Sets the window's appearance from the theme. The chrome paints itself
+    /// from semantic tokens, so everything below follows automatically — there
+    /// is no second palette to keep in step.
     public func applyChromeTheme(_ theme: EditorTheme?) {
-        let chrome = AppearanceTheme.chrome(for: theme)
-        window?.appearance = chrome.appearance
-        toolbar.applyChrome(background: chrome.background)
-        tabBar.applyChrome(background: chrome.background, selected: chrome.selectedTab, text: chrome.text)
-        statusBar.applyChrome(background: chrome.background, text: chrome.text)
+        window?.appearance = AppearanceTheme.chrome(for: theme).appearance
+        for view in [toolbar as NSView?, tabBar as NSView?, statusBar as NSView?].compactMap({ $0 }) {
+            view.needsDisplay = true
+        }
     }
 
     /// Re-applies key equivalents from the Shortcut Mapper onto the menu bar.

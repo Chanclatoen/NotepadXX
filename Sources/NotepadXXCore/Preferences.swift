@@ -9,8 +9,9 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var showToolbar: Bool = true
     public var showStatusBar: Bool = true
     public var showTabBar: Bool = true
-    public var tabBarMultiLine: Bool = false
-    public var tabBarVertical: Bool = false
+    /// Tab strip arrangement: "horizontal", "wrapped" or "vertical".
+    /// A single value rather than two booleans that can disagree.
+    public var tabLayoutRawValue: String = "horizontal"
     public var tabCloseButtonOnEachTab: Bool = true
     public var confirmCloseUnsaved: Bool = false   // Notepad++ scratchpad behaviour
 

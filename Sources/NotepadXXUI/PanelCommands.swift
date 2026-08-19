@@ -1,4 +1,5 @@
 import AppKit
+import NotepadXXDesign
 import NotepadXXCore
 
 /// View-menu panel toggles and the wiring between panels and the editor.
