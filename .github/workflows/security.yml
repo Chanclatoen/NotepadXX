@@ -19,7 +19,7 @@ jobs:
     container:
       image: semgrep/semgrep
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Scan
         # The custom rules in .semgrep.yml target this app's own hazards — the
         # Run menu's shell invocation, the plug-in bridge and the plug-in
@@ -38,7 +38,7 @@ jobs:
     name: Secret scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           # gitleaks reads history, so a secret committed and later removed is
           # still found — which is the point, since it stays in every clone.
@@ -56,7 +56,7 @@ jobs:
     name: App hardening
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Build
         run: ./scripts/make-app.sh
       - name: Check the signature and the runtime it asks for
