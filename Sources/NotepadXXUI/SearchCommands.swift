@@ -67,6 +67,7 @@ extension MainWindowController {
         panel.onFindAll = { [weak self] in self?.performFindAll($0) }
         panel.onReplaceAllInOpenDocuments = { [weak self] in self?.performReplaceAllInOpenDocuments($0) }
         panel.onFindInFiles = { [weak self] in self?.performFindInFiles($0) }
+        panel.onCancelSearch = { [weak self] in self?.cancelFileSearch() }
         panel.onReplaceInFiles = { [weak self] in self?.performReplaceInFiles($0) }
         panel.onMarkAll = { [weak self] in self?.performMarkAll($0) }
         panel.onClearMarks = { [weak self] _ in self?.clearMarksAction(nil) }
@@ -226,21 +227,70 @@ extension MainWindowController {
             return
         }
         rememberSearch(request)
-        do {
-            let results = try findInFiles(for: request).search(
-                directory: directory, openBuffers: unsavedBuffers())
-            let total = results.reduce(0) { $0 + $1.hits.count }
-            findPanel().endScan()
-            findPanel().showStatus(
-                "\(total) hit\(total == 1 ? "" : "s") in \(results.count) file\(results.count == 1 ? "" : "s")",
-                kind: total > 0 ? .success : .warning)
-            showSearchResults(results,
-                              summary: "“\(request.pattern)” · \(total) hits in \(results.count) files",
-                              query: request.pattern)
-        } catch {
-            findPanel().endScan()
-            report(error)
+
+        // Scan off the main thread. A synchronous walk of a large tree freezes
+        // the window, which also means the panel's progress and its Cancel
+        // button could never do anything.
+        let searcher = findInFiles(for: request)
+        let buffers = unsavedBuffers()
+        let cancelled = SearchCancellationToken()
+        activeFileSearch = cancelled
+        findPanel().showScanProgress(scanned: 0, total: 1, hits: 0)
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let results = try searcher.search(
+                    directory: directory, openBuffers: buffers,
+                    isCancelled: { cancelled.isCancelled },
+                    onProgress: { progress in
+                        DispatchQueue.main.async {
+                            MainActor.assumeIsolated {
+                                guard !cancelled.isCancelled else { return }
+                                self.findPanel().showScanProgress(
+                                    scanned: progress.scanned, total: progress.total,
+                                    hits: progress.hits)
+                            }
+                        }
+                    })
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        self.finishFindInFiles(results, request: request, cancelled: cancelled.isCancelled)
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        self.findPanel().endScan()
+                        self.report(error)
+                    }
+                }
+            }
         }
+    }
+
+    private func finishFindInFiles(_ results: [FileSearchResult],
+                                   request: SearchPanelController.Request,
+                                   cancelled: Bool) {
+        findPanel().endScan()
+        activeFileSearch = nil
+        guard !cancelled else {
+            findPanel().showStatus("Search cancelled.", kind: .neutral)
+            return
+        }
+        let total = results.reduce(0) { $0 + $1.hits.count }
+        findPanel().showStatus(
+            "\(total) hit\(total == 1 ? "" : "s") in \(results.count) file\(results.count == 1 ? "" : "s")",
+            kind: total > 0 ? .success : .warning)
+        showSearchResults(results,
+                          summary: "“\(request.pattern)” · \(total) hits in \(results.count) files",
+                          query: request.pattern)
+    }
+
+    /// Stops a running scan.
+    func cancelFileSearch() {
+        activeFileSearch?.cancel()
+        findPanel().endScan()
+        findPanel().showStatus("Search cancelled.", kind: .neutral)
     }
 
     /// Replace in Files always confirms first and reports a file-level summary.

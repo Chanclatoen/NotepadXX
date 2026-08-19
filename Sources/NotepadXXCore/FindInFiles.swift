@@ -104,7 +104,7 @@ public struct FindInFilesOptions: Sendable {
 /// Content for a path present in `openBuffers` is taken from memory rather than
 /// disk, so unsaved edits are searched — Notepad++ does the same, and getting it
 /// wrong produces results that don't match what the user sees.
-public struct FindInFiles {
+public struct FindInFiles: Sendable {
     public let engine: SearchEngine
     public let options: FindInFilesOptions
 
@@ -113,10 +113,18 @@ public struct FindInFiles {
         self.options = options
     }
 
+    /// How a scan is getting on: files looked at, files to look at, hits so far.
+    public struct Progress: Sendable, Equatable {
+        public let scanned: Int
+        public let total: Int
+        public let hits: Int
+    }
+
     public func search(
         directory: URL,
         openBuffers: [String: String] = [:],
-        isCancelled: () -> Bool = { false }
+        isCancelled: () -> Bool = { false },
+        onProgress: ((Progress) -> Void)? = nil
     ) throws -> [FileSearchResult] {
         var results: [FileSearchResult] = []
         // Key buffers by resolved path: /var/folders is a symlink to
@@ -126,8 +134,12 @@ public struct FindInFiles {
             openBuffers.map { (Self.canonicalPath($0.key), $0.value) },
             uniquingKeysWith: { first, _ in first }
         )
-        for url in try enumerateFiles(in: directory) {
+        let files = try enumerateFiles(in: directory)
+        var scanned = 0
+        var hitCount = 0
+        for url in files {
             if isCancelled() { break }
+            scanned += 1
             let content: String?
             if let buffered = buffers[Self.canonicalPath(url.path)] {
                 content = buffered
@@ -136,7 +148,15 @@ public struct FindInFiles {
             }
             guard let text = content else { continue }
             let hits = try search(text: text, url: url)
-            if !hits.isEmpty { results.append(FileSearchResult(url: url, hits: hits)) }
+            if !hits.isEmpty {
+                results.append(FileSearchResult(url: url, hits: hits))
+                hitCount += hits.count
+            }
+            // Reporting every file would cost more than the search; every
+            // twenty-five is often enough for a progress bar to move smoothly.
+            if scanned % 25 == 0 || scanned == files.count {
+                onProgress?(Progress(scanned: scanned, total: files.count, hits: hitCount))
+            }
         }
         return results
     }
@@ -212,5 +232,28 @@ public struct FindInFiles {
             files.append(url)
         }
         return files
+    }
+}
+
+/// A flag a running search checks, so it can be stopped from another thread.
+///
+/// A plain Bool shared across threads is a data race; this keeps the one bit
+/// behind a lock so the search and the Cancel button can both touch it.
+public final class SearchCancellationToken: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+
+    public init() {}
+
+    public var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled
+    }
+
+    public func cancel() {
+        lock.lock()
+        cancelled = true
+        lock.unlock()
     }
 }

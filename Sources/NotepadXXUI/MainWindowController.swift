@@ -27,6 +27,8 @@ public final class MainWindowController: NSWindowController {
     public var tabWidth: Int = 4
     var installedFindPanel: SearchPanelController?
     var installedGoToPanel: GoToPanelController?
+    /// The running Find in Files scan, if there is one.
+    var activeFileSearch: SearchCancellationToken?
     var documentSwitcherMonitor: Any?
     var installedRunPanel: RunPanelController?
     var installedRunMacroPanel: RunMacroPanelController?

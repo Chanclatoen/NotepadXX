@@ -51,7 +51,7 @@ public enum SearchError: Error, Equatable {
 /// `\K`, conditionals `(?(1)...)`, recursion `(?R)` and `\g{NAME}` have no ICU
 /// equivalent — see docs/ARCHITECTURE.md. Patterns are never silently rewritten;
 /// an unsupported construct surfaces as `invalidRegex`.
-public struct SearchEngine {
+public struct SearchEngine: Sendable {
     public let options: SearchOptions
     private let pattern: String
 

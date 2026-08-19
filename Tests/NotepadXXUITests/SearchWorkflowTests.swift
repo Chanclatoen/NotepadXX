@@ -252,3 +252,75 @@ final class SearchPanelLayoutTests: XCTestCase {
             .first { $0.hasSuffix(":") }
     }
 }
+
+/// A long scan must not freeze the window, and Cancel has to actually stop it.
+@MainActor
+final class FindInFilesProgressTests: XCTestCase {
+    private func makeTree(files: Int) throws -> URL {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("npxx-scan-\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        for index in 0..<files {
+            try "needle \(index)".write(to: root.appendingPathComponent("file\(index).txt"),
+                                        atomically: true, encoding: .utf8)
+        }
+        return root
+    }
+
+    func testTheScanReportsProgressAsItGoes() throws {
+        let root = try makeTree(files: 120)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var reports: [FindInFiles.Progress] = []
+        let results = try FindInFiles(engine: SearchEngine(pattern: "needle", options: SearchOptions()))
+            .search(directory: root, onProgress: { reports.append($0) })
+
+        XCTAssertEqual(results.count, 120)
+        XCTAssertGreaterThan(reports.count, 1, "progress is reported during the scan, not only at the end")
+        XCTAssertEqual(reports.last?.scanned, 120)
+        XCTAssertEqual(reports.last?.total, 120)
+        XCTAssertGreaterThan(reports.last?.hits ?? 0, 0)
+    }
+
+    /// Cancelling stops the walk rather than letting it run to the end.
+    func testCancellingStopsTheScanEarly() throws {
+        let root = try makeTree(files: 200)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let token = SearchCancellationToken()
+        var scanned = 0
+        let results = try FindInFiles(engine: SearchEngine(pattern: "needle", options: SearchOptions()))
+            .search(directory: root,
+                    isCancelled: { token.isCancelled },
+                    onProgress: { progress in
+                        scanned = progress.scanned
+                        if progress.scanned >= 25 { token.cancel() }
+                    })
+
+        XCTAssertLessThan(results.count, 200, "the scan stopped before the end")
+        XCTAssertGreaterThan(scanned, 0)
+    }
+
+    /// The panel drives the scan without blocking the main thread.
+    func testTheWindowStaysResponsiveWhileScanning() throws {
+        let root = try makeTree(files: 60)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let controller = MainWindowController()
+        controller.adopt(documents: [TextDocument(text: "x")], activeIndex: 0)
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        controller.showFindInFilesAction(nil)
+
+        controller.performFindInFiles(.init(pattern: "needle", replacement: "",
+                                            options: SearchOptions(), inSelection: false,
+                                            directory: root))
+        // performFindInFiles returned immediately: the scan is elsewhere.
+        XCTAssertEqual(controller.installedFindPanel?.isScanning, true)
+
+        let deadline = Date().addingTimeInterval(10)
+        while controller.installedFindPanel?.isScanning == true, Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        XCTAssertEqual(controller.searchResultsPanel?.fileCount, 60)
+    }
+}

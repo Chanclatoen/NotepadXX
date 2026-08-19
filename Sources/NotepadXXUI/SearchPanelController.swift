@@ -23,7 +23,7 @@ public final class SearchPanelController: NSWindowController {
         }
     }
 
-    public struct Request {
+    public struct Request: Sendable {
         public init(pattern: String, replacement: String, options: SearchOptions, inSelection: Bool,
                     directory: URL? = nil, filters: String = "", exclusions: String = "",
                     includeSubfolders: Bool = true, includeHidden: Bool = false,
