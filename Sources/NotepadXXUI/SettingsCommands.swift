@@ -53,6 +53,9 @@ extension MainWindowController {
             editor.autoCompleteMinimumCharacters = preferences.autoCompletionMinimumCharacters
             editor.pathCompletionEnabled = preferences.pathCompletion
             editor.showCallTips = preferences.showCallTips
+            editor.autoIndentEnabled = preferences.autoIndent
+            editor.indentUsesSpaces = preferences.replaceTabsBySpaces
+            editor.indentWidth = preferences.tabWidth
             editor.gutterView?.needsDisplay = true
             if let theme = themeStore?.theme(named: preferences.themeName) {
                 editor.applyTheme(theme)

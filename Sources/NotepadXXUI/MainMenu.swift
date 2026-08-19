@@ -209,6 +209,10 @@ public enum MainMenu {
             menu.addItem(float)
             menu.addItem(.separator())
             add(menu, "Toggle Split View", #selector(MainWindowController.toggleSplitViewAction(_:)))
+            add(menu, "Synchronize Vertical Scrolling",
+                #selector(MainWindowController.toggleSyncVerticalScrollAction(_:)))
+            add(menu, "Synchronize Horizontal Scrolling",
+                #selector(MainWindowController.toggleSyncHorizontalScrollAction(_:)))
             add(menu, "Move to Other View", #selector(MainWindowController.moveToOtherViewAction(_:)))
             add(menu, "Clone to Other View", #selector(MainWindowController.cloneToOtherViewAction(_:)))
             add(menu, "Close Split", #selector(MainWindowController.closeSplitAction(_:)))
@@ -279,6 +283,7 @@ public enum MainMenu {
 
     private static func windowMenu() -> NSMenuItem {
         submenu("Window") { menu in
+            add(menu, "Document Switcher", #selector(MainWindowController.showDocumentSwitcherAction(_:)), "\t", [.control])
             let minimise = menu.addItem(withTitle: "Minimize",
                                         action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
             minimise.keyEquivalentModifierMask = [.command]

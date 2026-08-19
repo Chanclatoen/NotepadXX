@@ -47,6 +47,13 @@ public final class MainWindowController: NSWindowController {
     var activeMarkStyle = 0
     var incrementalBar: IncrementalSearchBar?
     var incrementalOrigin = 0
+    var syncVerticalScroll = false
+    var syncHorizontalScroll = false
+    var scrollSyncObservers: [Any] = []
+    var isMirroringScroll = false
+    var documentSwitcher: DocumentSwitcherPanel?
+    /// Document ids, most recently used first.
+    var documentMRU: [UUID] = []
     private var incrementalHeightConstraint: NSLayoutConstraint?
     var hiddenPanelIdentifiers: [String] = []
     /// Bookmarked lines, keyed by document id.
@@ -276,6 +283,8 @@ public final class MainWindowController: NSWindowController {
             editorView.bottomAnchor.constraint(equalTo: editorContainer.bottomAnchor),
         ])
         window?.makeFirstResponder(controller.textView)
+        noteDocumentUsed(documents[index])
+        updateScrollSyncObservers()
         refreshTabs()
         refreshStatus()
     }

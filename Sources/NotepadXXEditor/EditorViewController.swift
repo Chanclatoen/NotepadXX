@@ -67,6 +67,11 @@ public final class EditorViewController: NSViewController {
     public var edgeColumn = 0 { didSet { edgeGuideView?.column = edgeColumn } }
     /// Cmd-click opens links, as in Notepad++'s clickable URLs.
     public var clickableURLs = true
+    public var autoIndentEnabled = true
+    public var indentUsesSpaces = false
+    public var indentWidth = 4
+    /// Guards the auto-indent insertion from re-entering the change handler.
+    private var isAutoIndenting = false
     /// Vertical guides at each indent level.
     public var showIndentGuides = true {
         didSet {
@@ -166,6 +171,25 @@ public final class EditorViewController: NSViewController {
         guard ranges.count > 1 else { return false }
         selectedRanges = Array(ranges.dropLast())
         return true
+    }
+
+    /// Indents a newly created line to match the one above.
+    ///
+    /// Runs after the newline has been inserted rather than intercepting the
+    /// key, because the engine owns text input. The re-entrancy guard matters:
+    /// inserting the indent triggers this handler again.
+    func applyAutoIndentIfNeeded(inserted: String, at range: NSRange) {
+        guard autoIndentEnabled, !isAutoIndenting, inserted == "\n" else { return }
+        let caret = selectedRange.location
+        let indent = AutoIndent.indent(
+            forNewLineAt: caret, in: textView.string,
+            language: language, tabWidth: indentWidth, useSpaces: indentUsesSpaces
+        )
+        guard !indent.isEmpty else { return }
+
+        isAutoIndenting = true
+        textView.replaceCharacters(in: NSRange(location: caret, length: 0), with: indent)
+        isAutoIndenting = false
     }
 
     /// Highlights marked ranges, one list per Mark style.
@@ -710,6 +734,7 @@ extension EditorViewController: @preconcurrency TextViewDelegate {
         }
         updateGutterWidth()
         refreshFoldMarkers()
+        applyAutoIndentIfNeeded(inserted: string, at: range)
         if !string.isEmpty { onTextInserted?(string) }
         updateCompletions(afterInserting: string)
         onTextChange?(textView.string)
