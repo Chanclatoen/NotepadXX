@@ -41,6 +41,47 @@ public struct ShortcutCommand: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+/// How badly two commands disagree about a key.
+public enum ConflictSeverity: String, Sendable, Equatable {
+    /// Two commands in the same scope. Both are flagged; the newer one only
+    /// wins after the user confirms.
+    case hard
+    /// A plug-in or macro shadows a menu command. Allowed, and resolved by
+    /// scope when the key is pressed.
+    case soft
+    /// Claimed by macOS. Refused, naming what owns it.
+    case reserved
+}
+
+/// What stands in the way of a binding.
+public struct ShortcutConflict: Sendable, Equatable {
+    public let severity: ConflictSeverity
+    /// The commands already using the key, for a hard or soft conflict.
+    public let commands: [ShortcutCommand]
+    /// What the system uses the key for, for a reserved one.
+    public let reservedBy: String?
+
+    public init(severity: ConflictSeverity, commands: [ShortcutCommand] = [], reservedBy: String? = nil) {
+        self.severity = severity
+        self.commands = commands
+        self.reservedBy = reservedBy
+    }
+
+    /// A sentence explaining the conflict — never a beep on its own.
+    public var explanation: String {
+        switch severity {
+        case .reserved:
+            return "\(reservedBy ?? "macOS") already uses this shortcut, and the system keeps it."
+        case .hard:
+            let names = commands.map(\.title).joined(separator: ", ")
+            return "Already used by \(names). Reassigning moves the shortcut and leaves it without one."
+        case .soft:
+            let names = commands.map(\.title).joined(separator: ", ")
+            return "\(names) also uses this shortcut. Both can keep it — the one in scope wins."
+        }
+    }
+}
+
 /// The Shortcut Mapper's model: every rebindable command, plus conflict
 /// detection so two commands cannot silently claim one key.
 public final class ShortcutMap {
@@ -62,21 +103,78 @@ public final class ShortcutMap {
         commands.filter { $0.id != id && $0.binding == binding }
     }
 
+    /// Shortcuts macOS keeps for itself, with what owns each one. Refusing
+    /// these with an explanation beats letting the user bind a key that will
+    /// never reach the app.
+    public static let systemReserved: [KeyBinding: String] = [
+        KeyBinding(key: "\t", modifiers: 1 << 20): "Switching applications",
+        KeyBinding(key: " ", modifiers: 1 << 20): "Spotlight",
+        KeyBinding(key: "q", modifiers: 1 << 20): "Quit",
+        KeyBinding(key: "h", modifiers: 1 << 20): "Hide the application",
+        KeyBinding(key: "3", modifiers: (1 << 20) | (1 << 17)): "Taking a screenshot",
+        KeyBinding(key: "4", modifiers: (1 << 20) | (1 << 17)): "Taking a screenshot",
+        KeyBinding(key: "5", modifiers: (1 << 20) | (1 << 17)): "Screenshot and recording",
+        KeyBinding(key: "\u{1b}", modifiers: (1 << 20) | (1 << 19)): "Force Quit",
+    ]
+
+    /// What, if anything, stands in the way of giving `binding` to `id`.
+    public func conflict(for binding: KeyBinding, assigningTo id: String) -> ShortcutConflict? {
+        if let owner = Self.systemReserved[binding] {
+            return ShortcutConflict(severity: .reserved, reservedBy: owner)
+        }
+        let clashing = conflicts(for: binding, excluding: id)
+        guard !clashing.isEmpty else { return nil }
+
+        // A plug-in or macro shadowing a menu command is resolved by scope at
+        // run time, so it is allowed and merely flagged.
+        let assigningCategory = commands.first { $0.id == id }?.category
+        let shadowing = assigningCategory == .plugin || assigningCategory == .macro
+        let allMenuCommands = clashing.allSatisfy { $0.category == .main }
+        if shadowing && allMenuCommands {
+            return ShortcutConflict(severity: .soft, commands: clashing)
+        }
+        return ShortcutConflict(severity: .hard, commands: clashing)
+    }
+
+    /// Every command currently in conflict with another, for the mapper's
+    /// "conflicts only" filter.
+    public func conflictingCommands() -> [ShortcutCommand] {
+        var counts: [KeyBinding: [ShortcutCommand]] = [:]
+        for command in commands {
+            guard let binding = command.binding else { continue }
+            counts[binding, default: []].append(command)
+        }
+        return counts.values.filter { $0.count > 1 }.flatMap { $0 }
+            .sorted { $0.title < $1.title }
+    }
+
     public enum AssignError: Error, Equatable {
         case unknownCommand
         case conflict([String])
+        /// Claimed by macOS, with what owns it.
+        case reserved(String)
     }
 
-    /// Assigns a binding. Refuses on conflict unless `force` is set, in which
-    /// case the previous holders are unbound — leaving two commands on one key
-    /// would make one of them silently unreachable.
-    public func assign(_ binding: KeyBinding?, to id: String, force: Bool = false) throws {
+    /// Assigns a binding.
+    ///
+    /// Refuses on conflict unless `force` is set, in which case the previous
+    /// holders are unbound — leaving two commands on one key would make one of
+    /// them silently unreachable. `allowingShadow` is the exception the design
+    /// makes for soft conflicts: a plug-in or macro may share a menu command's
+    /// key, because scope decides which one fires.
+    public func assign(_ binding: KeyBinding?, to id: String,
+                       force: Bool = false, allowingShadow: Bool = false) throws {
         guard let index = commands.firstIndex(where: { $0.id == id }) else {
             throw AssignError.unknownCommand
         }
         if let binding {
+            // A key the system owns is refused whatever `force` says: forcing
+            // it would store a shortcut that can never fire.
+            if let owner = Self.systemReserved[binding] {
+                throw AssignError.reserved(owner)
+            }
             let clashing = conflicts(for: binding, excluding: id)
-            if !clashing.isEmpty {
+            if !clashing.isEmpty && !allowingShadow {
                 guard force else { throw AssignError.conflict(clashing.map(\.title)) }
                 for conflict in clashing {
                     if let conflictIndex = commands.firstIndex(where: { $0.id == conflict.id }) {

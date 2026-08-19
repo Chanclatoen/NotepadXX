@@ -230,6 +230,7 @@ extension MainWindowController {
         guard preferencesStore?.preferences.detectFileChanges ?? true else { return }
         let silent = preferencesStore?.preferences.reloadChangedFilesSilently ?? false
 
+        var needsPrompt: [TextDocument] = []
         for tab in tabs {
             let document = tab.document
             guard document.hasChangedOnDisk(), let url = document.fileURL else { continue }
@@ -243,23 +244,11 @@ extension MainWindowController {
                 }
                 continue
             }
-
-            let alert = NSAlert()
-            alert.messageText = "“\(url.lastPathComponent)” changed on disk"
-            alert.informativeText = document.isDirty
-                ? "You have unsaved changes. Reloading will discard them."
-                : "Reload it?"
-            alert.addButton(withTitle: "Reload")
-            alert.addButton(withTitle: "Keep Mine")
-            if alert.runModal() == .alertFirstButtonReturn,
-               let reloaded = try? TextDocument.load(contentsOf: url) {
-                document.adoptContents(of: reloaded)
-                if let editor = editors[document.id] { editor.load(text: document.text) }
-            } else {
-                // Stop asking about this revision.
-                document.acceptOnDiskRevision()
-            }
+            needsPrompt.append(document)
         }
+
+        // Each prompt is a sheet on this window, asked one at a time.
+        promptForExternalChanges(needsPrompt)
         refreshUI()
     }
 

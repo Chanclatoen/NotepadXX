@@ -26,6 +26,7 @@ public final class MainWindowController: NSWindowController {
     /// Indentation width used by tab/space conversion commands.
     public var tabWidth: Int = 4
     var installedFindPanel: SearchPanelController?
+    var installedGoToPanel: GoToPanelController?
     var searchResultsPanel: SearchResultsPanel?
     var installedColumnEditor: ColumnEditorPanel?
     // View-menu display state, applied to every editor so it behaves like a
@@ -328,11 +329,18 @@ public final class MainWindowController: NSWindowController {
         guard documents.indices.contains(index) else { return }
         // Notepad++ keeps unsaved buffers by default, so this asks only when
         // the user has said they want to be asked.
-        if preferencesStore?.preferences.confirmCloseUnsaved == true,
-           documents[index].isDirty,
-           !confirmDiscard(of: documents[index]) {
+        if preferencesStore?.preferences.confirmCloseUnsaved == true, documents[index].isDirty {
+            confirmDiscard(of: documents[index]) { [weak self] shouldClose in
+                guard shouldClose else { return }
+                self?.performClose(index: index)
+            }
             return
         }
+        performClose(index: index)
+    }
+
+    private func performClose(index: Int) {
+        guard documents.indices.contains(index) else { return }
         let document = tabs.remove(at: index).document
         // Keep the editor alive if the same document is still open in the other
         // pane; discarding it would blank that pane.
@@ -345,17 +353,6 @@ public final class MainWindowController: NSWindowController {
             activate(index: min(index, documents.count - 1))
         }
         refreshTabs()
-    }
-
-    /// Asks before losing edits. Returns true when the close should continue.
-    private func confirmDiscard(of document: TextDocument) -> Bool {
-        let alert = NSAlert()
-        alert.messageText = "Close “\(document.displayName)” without saving?"
-        alert.informativeText = "Its unsaved edits will be lost."
-        alert.addButton(withTitle: "Close Without Saving")
-        alert.addButton(withTitle: "Cancel")
-        alert.buttons.first?.hasDestructiveAction = true
-        return alert.runModal() == .alertFirstButtonReturn
     }
 
     /// Refreshes tab titles and the status bar after an external change.
@@ -463,6 +460,17 @@ public final class MainWindowController: NSWindowController {
     /// Adds a document as a new tab and focuses it.
     public func appendDocument(_ document: TextDocument) {
         tabs.append(EditorTab(document: document, pane: document.paneIndex))
+        activate(index: tabs.count - 1)
+        refreshTabs()
+    }
+
+    /// Opens a document in the pane beside the current one, as a new tab.
+    /// Used to show the on-disk version of a file next to the edited one.
+    func openBeside(_ document: TextDocument) {
+        // Put it straight into the other pane. Toggling the split would move
+        // the tab as well, and the two moves would cancel out.
+        let currentPane = tabs.indices.contains(activeIndex) ? tabs[activeIndex].pane : 0
+        tabs.append(EditorTab(document: document, pane: currentPane == 0 ? 1 : 0))
         activate(index: tabs.count - 1)
         refreshTabs()
     }

@@ -394,13 +394,30 @@ extension MainWindowController {
 
     @objc public func goToLineDialogAction(_ sender: Any?) {
         guard let editor = currentEditor else { return }
-        let alert = NSAlert()
-        alert.messageText = "Go to line"
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Go")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn, let line = Int(field.stringValue) else { return }
-        editor.goToLine(line)
+        let panel = goToPanel()
+        panel.present(currentLine: editor.caretPosition().line,
+                      lineCount: max(1, editor.lineCount),
+                      characterCount: (editor.text as NSString).length)
+    }
+
+    func goToPanel() -> GoToPanelController {
+        if let existing = installedGoToPanel { return existing }
+        let panel = GoToPanelController()
+        panel.onGo = { [weak self] target, value in
+            guard let editor = self?.currentEditor else { return false }
+            switch target {
+            case .line:
+                guard value >= 1, value <= max(1, editor.lineCount) else { return false }
+                editor.goToLine(value)
+            case .offset:
+                let length = (editor.text as NSString).length
+                guard value >= 0, value <= length else { return false }
+                editor.selectedRange = NSRange(location: value, length: 0)
+                editor.scrollToCaret()
+            }
+            return true
+        }
+        installedGoToPanel = panel
+        return panel
     }
 }

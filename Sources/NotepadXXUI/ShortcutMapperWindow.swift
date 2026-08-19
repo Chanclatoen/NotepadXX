@@ -1,5 +1,6 @@
 import AppKit
 import NotepadXXCore
+import NotepadXXDesign
 
 /// The Shortcut Mapper: every rebindable command, grouped by category, with
 /// conflict detection.
@@ -14,11 +15,17 @@ public final class ShortcutMapperWindowController: NSWindowController {
     )
     private let tableView = NSTableView()
     private let filterField = NSSearchField()
+    private let conflictsOnlyBox = NSButton(checkboxWithTitle: "Conflicts only", target: nil, action: nil)
+    private let conflictLabel = NSTextField(labelWithString: "")
     private var rows: [ShortcutCommand] = []
+    private var conflictedIDs: Set<String> = []
+    /// The bindings this build ships with, for Restore Defaults.
+    private let defaults: [ShortcutCommand]
 
     public init(map: ShortcutMap, onChange: @escaping () -> Void) {
         self.map = map
         self.onChange = onChange
+        self.defaults = map.commands
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 620, height: 460),
             styleMask: [.titled, .closable, .resizable],
@@ -58,16 +65,21 @@ public final class ShortcutMapperWindowController: NSWindowController {
         scroll.documentView = tableView
         scroll.hasVerticalScroller = true
 
+        conflictsOnlyBox.target = self
+        conflictsOnlyBox.action = #selector(reload)
+        conflictLabel.font = DS.Font.small()
+
         let modify = NSButton(title: "Modify…", target: self, action: #selector(editSelected))
         let clear = NSButton(title: "Clear", target: self, action: #selector(clearSelected))
-        for button in [modify, clear] { button.bezelStyle = .rounded }
+        let restore = NSButton(title: "Restore Defaults", target: self, action: #selector(restoreDefaults))
+        for button in [modify, clear, restore] { button.bezelStyle = .rounded }
 
-        let buttons = NSStackView(views: [modify, clear])
+        let buttons = NSStackView(views: [conflictLabel, NSView(), restore, clear, modify])
         buttons.orientation = .horizontal
         buttons.spacing = 8
 
         let content = NSView()
-        for subview in [categoryControl, filterField, scroll, buttons] {
+        for subview in [categoryControl, filterField, conflictsOnlyBox, scroll, buttons] {
             subview.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(subview)
         }
@@ -79,11 +91,15 @@ public final class ShortcutMapperWindowController: NSWindowController {
             filterField.leadingAnchor.constraint(equalTo: categoryControl.trailingAnchor, constant: 12),
             filterField.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12),
 
-            scroll.topAnchor.constraint(equalTo: categoryControl.bottomAnchor, constant: 12),
+            conflictsOnlyBox.topAnchor.constraint(equalTo: categoryControl.bottomAnchor, constant: 8),
+            conflictsOnlyBox.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12),
+
+            scroll.topAnchor.constraint(equalTo: conflictsOnlyBox.bottomAnchor, constant: 8),
             scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12),
             scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12),
             scroll.bottomAnchor.constraint(equalTo: buttons.topAnchor, constant: -10),
 
+            buttons.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12),
             buttons.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12),
             buttons.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -12),
         ])
@@ -95,10 +111,40 @@ public final class ShortcutMapperWindowController: NSWindowController {
             max(0, min(categoryControl.selectedSegment, ShortcutCommand.Category.allCases.count - 1))
         ]
         let query = filterField.stringValue.trimmingCharacters(in: .whitespaces)
-        rows = map.commands(in: category).filter {
-            query.isEmpty || $0.title.localizedCaseInsensitiveContains(query)
+        let conflicting = Set(map.conflictingCommands().map(\.id))
+
+        rows = map.commands(in: category).filter { command in
+            let matchesQuery = query.isEmpty || command.title.localizedCaseInsensitiveContains(query)
+            let matchesFilter = conflictsOnlyBox.state == .off || conflicting.contains(command.id)
+            return matchesQuery && matchesFilter
         }
+        conflictedIDs = conflicting
+
+        // A count, not a silent list: an unnoticed conflict means a command
+        // that quietly never fires.
+        let total = conflicting.count
+        conflictLabel.stringValue = total == 0
+            ? "No conflicts"
+            : "\(total / 2) conflict\(total / 2 == 1 ? "" : "s") — a shortcut is claimed twice"
+        conflictLabel.textColor = total == 0 ? DS.Color.textSecondary : DS.Color.warning
         tableView.reloadData()
+    }
+
+    /// Restores every binding to the build's defaults.
+    @objc private func restoreDefaults() {
+        guard let window else { return }
+        let alert = NSAlert()
+        alert.messageText = "Restore every shortcut to its default?"
+        alert.informativeText = "Your rebindings are discarded. Nothing else changes."
+        let restore = alert.addButton(withTitle: "Restore")
+        restore.hasDestructiveAction = true
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            self.map.resetToDefaults(self.defaults)
+            self.onChange()
+            self.reload()
+        }
     }
 
     @objc private func clearSelected() {
@@ -147,19 +193,31 @@ public final class ShortcutMapperWindowController: NSWindowController {
         if controlBox.state == .on { modifiers |= (1 << 18) }
 
         let binding = KeyBinding(key: key, modifiers: modifiers)
-        do {
-            try map.assign(binding, to: command.id)
-        } catch ShortcutMap.AssignError.conflict(let holders) {
-            // Never leave two commands on one key silently; make the user choose.
-            let conflict = NSAlert()
-            conflict.messageText = "That shortcut is already used"
-            conflict.informativeText = "Currently assigned to: \(holders.joined(separator: ", "))."
-            conflict.addButton(withTitle: "Reassign")
-            conflict.addButton(withTitle: "Cancel")
-            guard conflict.runModal() == .alertFirstButtonReturn else { return }
-            try? map.assign(binding, to: command.id, force: true)
-        } catch {
-            return
+        if let conflict = map.conflict(for: binding, assigningTo: command.id) {
+            switch conflict.severity {
+            case .reserved:
+                // Refused with a sentence naming the owner, never a beep alone.
+                let refusal = NSAlert()
+                refusal.messageText = "\(binding.displayString) belongs to macOS"
+                refusal.informativeText = conflict.explanation
+                refusal.addButton(withTitle: "OK")
+                refusal.runModal()
+                return
+            case .hard:
+                let choice = NSAlert()
+                choice.messageText = "\(binding.displayString) is already used"
+                choice.informativeText = conflict.explanation
+                choice.addButton(withTitle: "Reassign")
+                choice.addButton(withTitle: "Cancel")
+                guard choice.runModal() == .alertFirstButtonReturn else { return }
+                try? map.assign(binding, to: command.id, force: true)
+            case .soft:
+                // Both commands keep the key; scope decides which one fires.
+                // Forcing here would unbind the menu command instead.
+                try? map.assign(binding, to: command.id, allowingShadow: true)
+            }
+        } else {
+            try? map.assign(binding, to: command.id)
         }
         onChange()
         reload()
@@ -179,6 +237,15 @@ extension ShortcutMapperWindowController: NSTableViewDataSource, NSTableViewDele
         field.font = tableColumn?.identifier.rawValue == "shortcut"
             ? .monospacedSystemFont(ofSize: 11, weight: .regular)
             : .systemFont(ofSize: 12)
+        // A conflicted row is coloured *and* marked, so the flag does not rest
+        // on hue alone.
+        if conflictedIDs.contains(command.id) {
+            field.textColor = DS.Color.warning
+            if tableColumn?.identifier.rawValue == "shortcut" {
+                field.stringValue = "⚠ \(text)"
+            }
+            field.setAccessibilityLabel("\(command.title), shortcut in conflict")
+        }
         return field
     }
 }

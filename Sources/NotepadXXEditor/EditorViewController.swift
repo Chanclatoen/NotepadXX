@@ -742,6 +742,15 @@ public final class EditorViewController: NSViewController {
         onTextChange?(textView.string)
     }
 
+    /// How many lines the document has, for anything that has to report or
+    /// bound a line number.
+    public var lineCount: Int { textView.layoutManager?.lineCount ?? 1 }
+
+    /// Brings the caret into view without moving it.
+    public func scrollToCaret() {
+        textView.scrollSelectionToVisible()
+    }
+
     /// Moves the caret to the start of a 1-based line and scrolls it into view.
     public func goToLine(_ line: Int) {
         let content = textView.string as NSString
