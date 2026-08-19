@@ -7,6 +7,10 @@ public struct DSTabItem: Equatable {
     /// names collide with another open one.
     public var qualifier: String?
     public var isActive: Bool
+    /// Whether this tab's pane holds the keyboard focus. Only the focused
+    /// pane's active tab shows the accent edge; the other keeps a grey one, so
+    /// which half of a split is live is never in doubt.
+    public var isInFocusedPane: Bool
     public var isDirty: Bool
     public var isPinned: Bool
     public var isReadOnly: Bool
@@ -16,13 +20,15 @@ public struct DSTabItem: Equatable {
     public var inSecondPane: Bool
     public var toolTip: String?
 
-    public init(title: String, qualifier: String? = nil, isActive: Bool = false, isDirty: Bool = false,
+    public init(title: String, qualifier: String? = nil, isActive: Bool = false,
+                isInFocusedPane: Bool = true, isDirty: Bool = false,
                 isPinned: Bool = false, isReadOnly: Bool = false,
                 showsCloseButton: Bool = true, accent: NSColor? = nil,
                 inSecondPane: Bool = false, toolTip: String? = nil) {
         self.title = title
         self.qualifier = qualifier
         self.isActive = isActive
+        self.isInFocusedPane = isInFocusedPane
         self.isDirty = isDirty
         self.isPinned = isPinned
         self.isReadOnly = isReadOnly
@@ -406,6 +412,9 @@ final class DSTabView: NSView {
 
     override var isFlipped: Bool { true }
 
+    /// What this tab is showing, so its state can be checked.
+    var itemForTesting: DSTabItem { item }
+
     override func draw(_ dirtyRect: NSRect) {
         // Surface
         if item.isActive {
@@ -419,7 +428,7 @@ final class DSTabView: NSView {
 
         // Active edge: top in a horizontal strip, leading edge in the rail.
         if item.isActive {
-            DS.Color.brand.setFill()
+            (item.isInFocusedPane ? DS.Color.brand : DS.Color.textDisabled).setFill()
             if vertical {
                 NSRect(x: 0, y: 0, width: 2, height: bounds.height).fill()
             } else {

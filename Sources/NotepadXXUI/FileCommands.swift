@@ -248,7 +248,7 @@ extension MainWindowController {
             if silent && !document.isDirty {
                 if let reloaded = try? TextDocument.load(contentsOf: url) {
                     document.adoptContents(of: reloaded)
-                    if let editor = editors[document.id] { editor.load(text: document.text) }
+                    for editor in editorControllers(for: document) { editor.load(text: document.text) }
                 }
                 continue
             }

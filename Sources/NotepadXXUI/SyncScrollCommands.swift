@@ -55,7 +55,7 @@ extension MainWindowController {
     var visiblePaneEditors: [EditorViewController] {
         var found: [EditorViewController] = []
         if let primary = currentEditor { found.append(primary) }
-        if let secondary = tabs(inPane: 1).first.flatMap({ editors[$0.document.id] }) {
+        if let secondary = tabs(inPane: 1).first.map({ editorController(for: $0.document, inPane: 1) }) {
             found.append(secondary)
         }
         return found

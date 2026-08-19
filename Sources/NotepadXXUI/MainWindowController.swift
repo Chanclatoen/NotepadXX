@@ -21,7 +21,17 @@ public final class MainWindowController: NSWindowController {
     var tabBar: DocumentTabStrip!
     var statusBar: DSStatusBar!
     private var editorContainer: NSView!
-    var editors: [UUID: EditorViewController] = [:]
+    /// One editor per document *per pane*.
+    ///
+    /// A view has one superview, so a document opened in both panes needs two
+    /// editors — with a single shared one, cloning left the first pane empty.
+    /// The design wants exactly this: edits stay in sync between clones, folds
+    /// and carets do not.
+    struct EditorKey: Hashable {
+        let document: UUID
+        let pane: Int
+    }
+    var editors: [EditorKey: EditorViewController] = [:]
     private var untitledCounter = 0
     /// Indentation width used by tab/space conversion commands.
     public var tabWidth: Int = 4
@@ -75,6 +85,8 @@ public final class MainWindowController: NSWindowController {
     var editorSplit: EvenSplitView!
     var secondaryContainer: NSView!
     private var secondaryActiveIndex = 0
+    /// The pane-0 tab being shown, so activating a pane-1 tab leaves it alone.
+    private var primaryActiveDocumentID: UUID?
     var dockHost: DockHostView?
     var functionListPanel: FunctionListPanel?
     var folderWorkspacePanel: FolderWorkspacePanel?
@@ -286,15 +298,28 @@ public final class MainWindowController: NSWindowController {
     }
 
     public func editorController(for document: TextDocument) -> EditorViewController {
-        if let existing = editors[document.id] { return existing }
+        editorController(for: document, inPane: paneOf(document))
+    }
+
+    /// The pane a document's tab currently sits in.
+    private func paneOf(_ document: TextDocument) -> Int {
+        tabs.first { $0.document === document }?.pane ?? 0
+    }
+
+    public func editorController(for document: TextDocument, inPane pane: Int) -> EditorViewController {
+        let key = EditorKey(document: document.id, pane: pane)
+        if let existing = editors[key] { return existing }
         let controller = EditorViewController()
         controller.loadViewIfNeeded()
         if document.languageName == nil { autoDetectLanguage(for: document) }
         controller.setLanguage(document.languageName.flatMap { LanguageRegistry.shared.language(named: $0) })
         controller.load(text: document.text)
-        controller.onTextChange = { [weak self, weak document] text in
+        controller.onTextChange = { [weak self, weak document, weak controller] text in
             guard let document else { return }
             document.text = text
+            // A clone in the other pane shows the same document, so it has to
+            // show the same text.
+            self?.syncClones(of: document, from: controller, text: text)
             self?.refreshTabs()
             self?.refreshStatus()
         }
@@ -310,14 +335,60 @@ public final class MainWindowController: NSWindowController {
         controller.completionEntries = completionData?.entries(
             forLanguage: document.languageName
         ) ?? []
-        editors[document.id] = controller
+        // An editor created after focus was last applied would otherwise
+        // default to focused, and two panes would both look live.
+        controller.isPaneFocused = !isSplit || pane == currentFocusedPane
+        editors[key] = controller
         return controller
+    }
+
+    /// The pane holding the active tab.
+    var currentFocusedPane: Int {
+        tabs.indices.contains(activeIndex) ? tabs[activeIndex].pane : 0
+    }
+
+    /// Only the focused pane shows a live caret and the current-line tint; the
+    /// other is visibly the one that is not being typed into.
+    private func applyPaneFocus() {
+        guard isSplit else {
+            for editor in allEditors { editor.isPaneFocused = true }
+            return
+        }
+        for (key, editor) in editors {
+            editor.isPaneFocused = key.pane == currentFocusedPane
+        }
+    }
+
+    /// Every editor showing this document, across both panes.
+    func editorControllers(for document: TextDocument) -> [EditorViewController] {
+        (0...1).compactMap { editors[EditorKey(document: document.id, pane: $0)] }
+    }
+
+    /// Pushes an edit to the same document's editor in the other pane.
+    private func syncClones(of document: TextDocument,
+                            from source: EditorViewController?, text: String) {
+        for pane in 0...1 {
+            let key = EditorKey(document: document.id, pane: pane)
+            guard let sibling = editors[key], sibling !== source, sibling.text != text else { continue }
+            // Keep the clone's caret where it was; only the text is shared.
+            let caret = sibling.selectedRange
+            sibling.replaceAll(with: text)
+            let length = (text as NSString).length
+            sibling.selectedRange = NSRange(location: min(caret.location, length), length: 0)
+        }
     }
 
     private func activate(index: Int) {
         guard documents.indices.contains(index) else { return }
         activeIndex = index
-        let controller = editorController(for: documents[index])
+        // Each pane keeps its own active tab. Activating a tab in the other
+        // pane must not change what this one is showing.
+        if tabs[index].pane == 0 { primaryActiveDocumentID = tabs[index].document.id }
+        let primaryDocument = tabs.first { $0.pane == 0 && $0.document.id == primaryActiveDocumentID }?.document
+            ?? tabs.first { $0.pane == 0 }?.document
+            ?? documents[index]
+        primaryActiveDocumentID = primaryDocument.id
+        let controller = editorController(for: primaryDocument, inPane: 0)
 
         editorContainer.subviews.forEach { $0.removeFromSuperview() }
         let editorView = controller.view
@@ -353,10 +424,11 @@ public final class MainWindowController: NSWindowController {
     private func performClose(index: Int) {
         guard documents.indices.contains(index) else { return }
         let document = tabs.remove(at: index).document
-        // Keep the editor alive if the same document is still open in the other
-        // pane; discarding it would blank that pane.
-        if !tabs.contains(where: { $0.document === document }) {
-            editors.removeValue(forKey: document.id)
+        // Drop only the editors for panes this document no longer occupies;
+        // discarding the other pane's would blank it.
+        let remainingPanes = Set(tabs.filter { $0.document === document }.map(\.pane))
+        for pane in 0...1 where !remainingPanes.contains(pane) {
+            editors.removeValue(forKey: EditorKey(document: document.id, pane: pane))
         }
         if documents.isEmpty {
             newDocument()
@@ -394,7 +466,7 @@ public final class MainWindowController: NSWindowController {
 
         secondaryActiveIndex = min(secondaryActiveIndex, secondary.count - 1)
         let document = secondary[secondaryActiveIndex].element.document
-        let controller = editorController(for: document)
+        let controller = editorController(for: document, inPane: 1)
 
         secondaryContainer.subviews.forEach { $0.removeFromSuperview() }
         let editorView = controller.view
@@ -410,13 +482,29 @@ public final class MainWindowController: NSWindowController {
 
     private func refreshTabs() {
         let qualifiers = Self.qualifiers(for: tabs.map(\.document))
+        let focusedPane = currentFocusedPane
+        // Each pane shows its own active tab.
+        let activeInPane: [Int: ObjectIdentifier] = [
+            0: tabs.first { $0.pane == 0 && $0.document.id == primaryActiveDocumentID }
+                .map { ObjectIdentifier($0.document) }
+                ?? tabs.first { $0.pane == 0 }.map { ObjectIdentifier($0.document) },
+            1: tabs(inPane: 1).indices.contains(secondaryActiveIndex)
+                ? ObjectIdentifier(tabs(inPane: 1)[secondaryActiveIndex].document)
+                : tabs.first { $0.pane == 1 }.map { ObjectIdentifier($0.document) },
+        ].compactMapValues { $0 }
+        // A document open in both panes: the copy in the other pane is a clone.
+        let clonedDocuments = Set(
+            Dictionary(grouping: tabs, by: { ObjectIdentifier($0.document) })
+                .filter { $0.value.count > 1 }.keys)
         tabBar.configure(items: tabs.map { tab in
             let attributes = self.attributes(for: tab.document)
             return DSTabItem(
                 title: TabTitle.shortened(tab.document.displayName),
-                qualifier: qualifiers[ObjectIdentifier(tab.document)],
-                isActive: self.tabs.firstIndex(where: { $0.document === tab.document && $0.pane == tab.pane })
-                    == self.activeIndex,
+                qualifier: clonedDocuments.contains(ObjectIdentifier(tab.document)) && tab.pane == 1
+                    ? "clone"
+                    : qualifiers[ObjectIdentifier(tab.document)],
+                isActive: activeInPane[tab.pane] == ObjectIdentifier(tab.document),
+                isInFocusedPane: tab.pane == focusedPane,
                 isDirty: tab.document.isDirty,
                 isPinned: attributes.isPinned,
                 isReadOnly: tab.document.isReadOnly,
@@ -432,6 +520,7 @@ public final class MainWindowController: NSWindowController {
             )
         }
         rebuildPanes()
+        applyPaneFocus()
         window?.title = documents.indices.contains(activeIndex) ? documents[activeIndex].displayName : "NotepadXX"
     }
 
@@ -663,7 +752,9 @@ public final class MainWindowController: NSWindowController {
     @objc public func saveAllAction(_ sender: Any?) {
         for document in documents where !document.isUntitled && document.isDirty {
             try? document.save()
-            editors[document.id]?.documentDidSave()
+            for pane in 0...1 {
+                editors[EditorKey(document: document.id, pane: pane)]?.documentDidSave()
+            }
         }
         refreshTabs()
     }

@@ -60,7 +60,7 @@ extension MainWindowController {
             case .alertFirstButtonReturn:
                 if let reloaded = try? TextDocument.load(contentsOf: url) {
                     document.adoptContents(of: reloaded)
-                    if let editor = self.editors[document.id] { editor.load(text: document.text) }
+                    for editor in self.editorControllers(for: document) { editor.load(text: document.text) }
                 }
             case .alertThirdButtonReturn:
                 self.openOnDiskCopyForComparison(of: document, at: url)

@@ -64,7 +64,12 @@ public final class EditorViewController: NSViewController {
     public var smartHighlightEnabled = true
     /// Highlights the bracket partnering the one at the caret.
     public var braceMatchingEnabled = true
-    public var showsCurrentLineHighlight = true
+    public var showsCurrentLineHighlight = true {
+        didSet {
+            // Remember what was asked for, so regaining focus restores it.
+            if isPaneFocused { wantsCurrentLineHighlight = showsCurrentLineHighlight }
+        }
+    }
     /// Column for the vertical edge guide; 0 disables it.
     public var edgeColumn = 0 { didSet { edgeGuideView?.column = edgeColumn } }
     /// Cmd-click opens links, as in Notepad++'s clickable URLs.
@@ -91,6 +96,22 @@ public final class EditorViewController: NSViewController {
 
     /// Caret width in points, from Preferences.
     public var caretWidth: CGFloat = 1 { didSet { applyCaretAppearance() } }
+    /// Whether this editor's pane holds the focus. An unfocused pane keeps its
+    /// text but drops the current-line tint and the caret, so the live half of
+    /// a split is obvious.
+    public var isPaneFocused = true {
+        didSet {
+            guard isPaneFocused != oldValue else { return }
+            showsCurrentLineHighlight = isPaneFocused && wantsCurrentLineHighlight
+            for cursor in cursorViews() { cursor.isHidden = !isPaneFocused }
+            textView.needsDisplay = true
+        }
+    }
+
+    /// What the preferences asked for, kept separately so focus can override it
+    /// without losing the setting.
+    private var wantsCurrentLineHighlight = true
+
     /// Whether the caret blinks. macOS owns the rate.
     public var caretBlinks = true { didSet { applyCaretAppearance() } }
 
