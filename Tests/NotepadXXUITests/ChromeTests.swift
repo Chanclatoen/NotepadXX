@@ -2,6 +2,7 @@ import XCTest
 import AppKit
 @testable import NotepadXXUI
 @testable import NotepadXXCore
+@testable import NotepadXXDesign
 
 @MainActor
 final class ToolbarTests: XCTestCase {
@@ -10,45 +11,46 @@ final class ToolbarTests: XCTestCase {
     /// "text.wrap", which does not exist.
     func testEveryToolbarSymbolExists() {
         var missing: [String] = []
-        for item in ToolbarView.defaultGroups().flatMap({ $0 }) {
+        for item in ToolbarCatalogue.groups().flatMap({ $0 }) {
             if NSImage(systemSymbolName: item.symbol, accessibilityDescription: nil) == nil {
-                missing.append("\(item.tooltip): \(item.symbol)")
+                missing.append("\(item.label): \(item.symbol)")
             }
         }
         XCTAssertTrue(missing.isEmpty, "unknown SF Symbols: \(missing)")
     }
 
     func testToolbarCoversTheNotepadPlusPlusGroups() {
-        let groups = ToolbarView.defaultGroups()
-        let tooltips = groups.flatMap { $0 }.map(\.tooltip)
+        let groups = ToolbarCatalogue.groups()
+        let labels = groups.flatMap { $0 }.map(\.label)
         for expected in ["New", "Open", "Save", "Save All", "Print", "Cut", "Copy", "Paste",
                          "Undo", "Redo", "Find", "Replace", "Zoom In", "Zoom Out",
-                         "Word Wrap", "Document Map", "Function List", "Run"] {
-            XCTAssertTrue(tooltips.contains(expected), "toolbar is missing \(expected)")
+                         "Word Wrap", "Document Map", "Function List", "Run…"] {
+            XCTAssertTrue(labels.contains(expected), "toolbar is missing \(expected)")
         }
         XCTAssertGreaterThan(groups.count, 5, "buttons are grouped, not one long row")
     }
 
     func testEveryToolbarButtonHasAnImageAndNoTitle() {
-        let toolbar = ToolbarView()
-        toolbar.configure(groups: ToolbarView.defaultGroups())
-        toolbar.frame = NSRect(x: 0, y: 0, width: 1200, height: 32)
+        let toolbar = DSToolbar()
+        toolbar.configure(groups: ToolbarCatalogue.groups())
+        toolbar.frame = NSRect(x: 0, y: 0, width: 1200, height: DS.Metric.toolbar)
         toolbar.layoutSubtreeIfNeeded()
 
-        func buttons(in view: NSView) -> [NSButton] {
-            var found = view.subviews.compactMap { $0 as? NSButton }
-            for sub in view.subviews { found += buttons(in: sub) }
-            return found
+        // The command buttons only. The overflow control is a menu button and
+        // legitimately carries a label.
+        func commandButtons(in view: NSView) -> [DSToolbarButton] {
+            view.subviews.compactMap { $0 as? DSToolbarButton }
+                + view.subviews.flatMap { commandButtons(in: $0) }
         }
-        let all = buttons(in: toolbar)
+        let all = commandButtons(in: toolbar)
         XCTAssertGreaterThan(all.count, 20)
         XCTAssertTrue(all.allSatisfy { $0.image != nil }, "a button with no image renders as text")
         XCTAssertTrue(all.allSatisfy { $0.title.isEmpty }, "titles must not leak into the toolbar")
     }
 
     func testToggleStateIsReflected() {
-        let toolbar = ToolbarView()
-        toolbar.configure(groups: ToolbarView.defaultGroups())
+        let toolbar = DSToolbar()
+        toolbar.configure(groups: ToolbarCatalogue.groups())
         toolbar.activeToggles = ["Word Wrap"]
         XCTAssertTrue(toolbar.activeToggles.contains("Word Wrap"))
     }
@@ -57,44 +59,48 @@ final class ToolbarTests: XCTestCase {
 @MainActor
 final class StatusBarTests: XCTestCase {
     private func labels(in view: NSView) -> [String] {
-        var found = view.subviews.compactMap { ($0 as? NSTextField)?.stringValue }
-        for sub in view.subviews { found += labels(in: sub) }
-        return found
+        view.subviews.compactMap { ($0 as? NSTextField)?.stringValue }
+            + view.subviews.flatMap { labels(in: $0) }
+    }
+
+    private func bar(_ model: DSStatusBar.Model, width: CGFloat = 1200) -> DSStatusBar {
+        let bar = DSStatusBar()
+        bar.frame = NSRect(x: 0, y: 0, width: width, height: DS.Metric.statusBar)
+        bar.update(model)
+        bar.layoutSubtreeIfNeeded()
+        return bar
     }
 
     /// Notepad++ shows six segments; the order and wording are muscle memory.
     func testAllSixSegmentsArePopulated() {
-        let bar = StatusBarView()
-        bar.update(documentType: "Swift", length: 278, lines: 14,
-                   selection: 0, selectedLines: 0, line: 1, column: 1,
-                   lineEnding: "Unix (LF)", encoding: "UTF-8", isOverwrite: false)
-        let text = labels(in: bar).joined(separator: " | ")
+        let text = labels(in: bar(DSStatusBar.Model(
+            documentType: "Swift", length: 278, lines: 14,
+            caretLine: 1, caretColumn: 1, lineEnding: "Unix (LF)", encoding: "UTF-8"
+        ))).joined(separator: " | ")
 
         XCTAssertTrue(text.contains("Swift"), "document type")
-        XCTAssertTrue(text.contains("length : 278"))
-        XCTAssertTrue(text.contains("lines : 14"))
-        XCTAssertTrue(text.contains("Ln : 1"))
-        XCTAssertTrue(text.contains("Col : 1"))
+        XCTAssertTrue(text.contains("278"), "length")
+        XCTAssertTrue(text.contains("14"), "line count")
+        XCTAssertTrue(text.contains("Ln 1"))
+        XCTAssertTrue(text.contains("Col 1"))
         XCTAssertTrue(text.contains("Unix (LF)"))
         XCTAssertTrue(text.contains("UTF-8"))
         XCTAssertTrue(text.contains("INS"))
     }
 
     func testOverwriteModeIsShown() {
-        let bar = StatusBarView()
-        bar.update(documentType: "Normal text file", length: 0, lines: 1,
-                   selection: 0, selectedLines: 0, line: 1, column: 1,
-                   lineEnding: "Unix (LF)", encoding: "UTF-8", isOverwrite: true)
-        XCTAssertTrue(labels(in: bar).contains("OVR"))
+        let shown = labels(in: bar(DSStatusBar.Model(isOverwrite: true)))
+        XCTAssertTrue(shown.contains("OVR"))
     }
 
     /// Notepad++ reports a selection as characters and lines.
     func testSelectionShowsCharactersAndLines() {
-        let bar = StatusBarView()
-        bar.update(documentType: "Swift", length: 100, lines: 10,
-                   selection: 42, selectedLines: 3, line: 5, column: 2,
-                   lineEnding: "Windows (CR LF)", encoding: "UTF-8-BOM", isOverwrite: false)
-        XCTAssertTrue(labels(in: bar).joined().contains("Sel : 42 | 3"))
+        let text = labels(in: bar(DSStatusBar.Model(
+            documentType: "Swift", length: 100, lines: 10,
+            caretLine: 5, caretColumn: 2, selectionCharacters: 42, selectionLines: 3,
+            lineEnding: "Windows (CR LF)", encoding: "UTF-8-BOM"
+        ))).joined()
+        XCTAssertTrue(text.contains("Sel 42 | 3"), "got: \(text)")
     }
 }
 

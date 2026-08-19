@@ -1,6 +1,7 @@
 import XCTest
 import AppKit
 @testable import NotepadXXUI
+@testable import NotepadXXDesign
 @testable import NotepadXXCore
 
 @MainActor
@@ -187,31 +188,34 @@ final class FloatingPanelTests: XCTestCase {
 
 @MainActor
 final class TabLayoutTests: XCTestCase {
+    private func strip(_ layout: DocumentTabStrip.Layout, tabs: Int) -> DocumentTabStrip {
+        let strip = DocumentTabStrip()
+        strip.tabLayout = layout
+        strip.configure(items: (0..<tabs).map { DSTabItem(title: "document \($0).swift") })
+        return strip
+    }
+
     func testHorizontalLayoutIsFixedHeight() {
-        let bar = TabBarView()
-        bar.layout = .horizontal
-        XCTAssertEqual(bar.requiredExtent(tabCount: 20, availableWidth: 1000), 28)
+        let strip = strip(.horizontal, tabs: 20)
+        XCTAssertEqual(strip.requiredExtent(forWidth: 1000), DocumentTabStrip.rowHeight,
+                       "a horizontal strip scrolls rather than growing")
     }
 
-    func testVerticalLayoutGrowsWithTabCount() {
-        let bar = TabBarView()
-        bar.layout = .vertical
-        let two = bar.requiredExtent(tabCount: 2, availableWidth: 1000)
-        let ten = bar.requiredExtent(tabCount: 10, availableWidth: 1000)
-        XCTAssertGreaterThan(ten, two)
+    /// The rail is a fixed-width column beside the editor, whatever it holds.
+    func testTheVerticalRailIsAFixedWidth() {
+        XCTAssertEqual(strip(.vertical, tabs: 2).requiredExtent(forWidth: 1000),
+                       DocumentTabStrip.railWidth)
+        XCTAssertEqual(strip(.vertical, tabs: 40).requiredExtent(forWidth: 1000),
+                       DocumentTabStrip.railWidth)
     }
 
-    func testMultiLineWrapsByAvailableWidth() {
-        let bar = TabBarView()
-        bar.layout = .multiLine
-        let wide = bar.requiredExtent(tabCount: 8, availableWidth: 1600)
-        let narrow = bar.requiredExtent(tabCount: 8, availableWidth: 320)
+    func testWrappedLayoutNeedsMoreRowsInANarrowerWindow() {
+        let wide = strip(.wrapped, tabs: 8).requiredExtent(forWidth: 1600)
+        let narrow = strip(.wrapped, tabs: 8).requiredExtent(forWidth: 320)
         XCTAssertGreaterThan(narrow, wide, "a narrower window needs more rows")
     }
 
     func testZeroTabsStillHasHeight() {
-        let bar = TabBarView()
-        bar.layout = .multiLine
-        XCTAssertGreaterThan(bar.requiredExtent(tabCount: 0, availableWidth: 1000), 0)
+        XCTAssertGreaterThan(strip(.wrapped, tabs: 0).requiredExtent(forWidth: 1000), 0)
     }
 }

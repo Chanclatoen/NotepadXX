@@ -152,7 +152,7 @@ extension ProjectPanel: NSOutlineViewDataSource, NSOutlineViewDelegate {
                     string: name,
                     attributes: [
                         .strikethroughStyle: NSUnderlineStyle.single.rawValue,
-                        .foregroundColor: NSColor.systemRed,
+                        .foregroundColor: DS.Color.error,
                         .font: NSFont.systemFont(ofSize: 11),
                     ]
                 )

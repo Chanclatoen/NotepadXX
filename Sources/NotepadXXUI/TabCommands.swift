@@ -169,13 +169,16 @@ extension MainWindowController {
 
     /// AppKit colour for a tab tag.
     func colour(for attributes: TabAttributes) -> NSColor? {
+        // The design's five mark fills, which are already chosen to stay
+        // distinguishable from each other in both appearances.
+        let palette = DS.MarkStyleAppearance.styles().map(\.fill)
         switch attributes.colour {
         case .none: return nil
-        case .yellow: return NSColor.systemYellow.withAlphaComponent(0.35)
-        case .green: return NSColor.systemGreen.withAlphaComponent(0.35)
-        case .blue: return NSColor.systemBlue.withAlphaComponent(0.35)
-        case .orange: return NSColor.systemOrange.withAlphaComponent(0.35)
-        case .purple: return NSColor.systemPurple.withAlphaComponent(0.35)
+        case .yellow: return palette[0]
+        case .green: return palette[1]
+        case .blue: return palette[2]
+        case .orange: return palette[3]
+        case .purple: return palette[4]
         }
     }
 }

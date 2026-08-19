@@ -1,4 +1,5 @@
 import AppKit
+import NotepadXXDesign
 import NotepadXXCore
 
 /// The autocomplete list that appears as you type, plus the call tip.
@@ -58,7 +59,7 @@ public final class CompletionPopup: NSObject {
         self.items = items
         self.host = view
 
-        let rowHeight: CGFloat = 18
+        let rowHeight: CGFloat = Self.rowHeight
         let visibleRows = min(items.count, 10)
         let tipHeight: CGFloat = items.first?.detail == nil ? 0 : 18
         let size = NSSize(width: 340, height: CGFloat(visibleRows) * rowHeight + 8 + tipHeight)
@@ -145,10 +146,10 @@ public final class CompletionPopup: NSObject {
     private func layout(in panel: NSWindow, size: NSSize, showTip: Bool) {
         let content = NSView(frame: NSRect(origin: .zero, size: size))
         content.wantsLayer = true
-        content.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        content.layer?.backgroundColor = DS.Color.panel.cgColor
         content.layer?.cornerRadius = 5
         content.layer?.borderWidth = 1
-        content.layer?.borderColor = NSColor.separatorColor.cgColor
+        content.layer?.borderColor = DS.Color.controlBorder.cgColor
 
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         tipField.translatesAutoresizingMaskIntoConstraints = false
@@ -175,16 +176,50 @@ extension CompletionPopup: NSTableViewDataSource, NSTableViewDelegate {
     public func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         guard items.indices.contains(row) else { return nil }
         let item = items[row]
-        let symbol: String
-        switch item.kind {
-        case .keyword: symbol = "k"
-        case .function: symbol = "f"
-        case .path: symbol = "/"
-        case .word: symbol = "·"
+        // The design's row: a kind letter, a mono label, and the type
+        // right-aligned so the eye can scan one edge.
+        let kind = NSTextField(labelWithString: Self.kindLetter(for: item.kind))
+        kind.font = DS.Font.smallEmphasis()
+        kind.textColor = DS.Color.textTertiary
+        kind.alignment = .center
+        kind.widthAnchor.constraint(equalToConstant: 14).isActive = true
+
+        let label = NSTextField(labelWithString: item.text)
+        label.font = DS.Font.mono(11)
+        label.textColor = DS.Color.textPrimary
+        label.lineBreakMode = .byTruncatingTail
+
+        let type = NSTextField(labelWithString: item.detail ?? "")
+        type.font = DS.Font.small()
+        type.textColor = DS.Color.textTertiary
+        type.alignment = .right
+        type.lineBreakMode = .byTruncatingHead
+
+        let row = NSStackView(views: [kind, label, NSView(), type])
+        row.orientation = .horizontal
+        row.spacing = DS.Space.s
+        row.setAccessibilityLabel("\(item.text), \(Self.kindName(for: item.kind))")
+        return row
+    }
+
+    static let rowHeight: CGFloat = 20
+
+    private static func kindLetter(for kind: CompletionItem.Kind) -> String {
+        switch kind {
+        case .keyword: return "K"
+        case .function: return "F"
+        case .path: return "/"
+        case .word: return "W"
         }
-        let field = NSTextField(labelWithString: "\(symbol)  \(item.text)")
-        field.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-        return field
+    }
+
+    private static func kindName(for kind: CompletionItem.Kind) -> String {
+        switch kind {
+        case .keyword: return "keyword"
+        case .function: return "function"
+        case .path: return "path"
+        case .word: return "word in this document"
+        }
     }
 
     public func tableViewSelectionDidChange(_ notification: Notification) {
