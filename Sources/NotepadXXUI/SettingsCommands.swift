@@ -63,9 +63,7 @@ extension MainWindowController {
             editor.indentUsesSpaces = preferences.replaceTabsBySpaces
             editor.indentWidth = preferences.tabWidth
             editor.gutterView?.needsDisplay = true
-            if let theme = themeStore?.theme(named: preferences.themeName) {
-                editor.applyTheme(theme)
-            }
+            editor.applyTheme(resolvedTheme(named: preferences.themeName))
         }
         if let layout = DocumentTabStrip.Layout(rawValue: preferences.tabLayoutRawValue),
            layout != tabBar.tabLayout {
@@ -75,7 +73,8 @@ extension MainWindowController {
         statusBar.isHidden = !preferences.showStatusBar
         tabBar.isHidden = !preferences.showTabBar
         toolbar.isHidden = !preferences.showToolbar
-        applyChromeTheme(themeStore?.theme(named: preferences.themeName))
+        applyChromeTheme(resolvedTheme(named: preferences.themeName),
+                         followsSystem: preferences.themeName == EditorTheme.systemThemeName)
     }
 
     /// Themes the toolbar, tab bar and status bar to match the editor, so the
@@ -83,11 +82,50 @@ extension MainWindowController {
     /// Sets the window's appearance from the theme. The chrome paints itself
     /// from semantic tokens, so everything below follows automatically — there
     /// is no second palette to keep in step.
-    public func applyChromeTheme(_ theme: EditorTheme?) {
-        window?.appearance = AppearanceTheme.chrome(for: theme).appearance
+    /// The theme to actually use. "System" resolves to the light or dark
+    /// built-in according to the appearance the window is in, so the editor
+    /// never stays light inside dark chrome.
+    public func resolvedTheme(named name: String) -> EditorTheme {
+        if let theme = themeStore?.theme(named: name), name != EditorTheme.systemThemeName {
+            return theme
+        }
+        return isDarkAppearance ? .defaultDark : .defaultLight
+    }
+
+    /// Whether the window (or the app, before there is one) is in dark mode.
+    var isDarkAppearance: Bool {
+        let appearance = window?.effectiveAppearance ?? NSApp.effectiveAppearance
+        return appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    }
+
+    /// Applies a theme to the window chrome.
+    ///
+    /// A theme the user named forces the matching appearance, so light chrome
+    /// never frames a dark editor. "System" leaves the window following the
+    /// Mac, which is what `followsSystem` says.
+    public func applyChromeTheme(_ theme: EditorTheme?, followsSystem: Bool = false) {
+        window?.appearance = followsSystem ? nil : AppearanceTheme.chrome(for: theme).appearance
+        repaintChrome()
+    }
+
+    /// Marks the chrome for redraw. The components resolve their own tokens, so
+    /// there is nothing to push into them.
+    func repaintChrome() {
         for view in [toolbar as NSView?, tabBar as NSView?, statusBar as NSView?].compactMap({ $0 }) {
             view.needsDisplay = true
         }
+    }
+
+    /// Re-applies the theme when the Mac switches between light and dark, so
+    /// a "System" theme is not merely the appearance at launch.
+    public func appearanceDidChange() {
+        guard preferencesStore?.preferences.themeName == EditorTheme.systemThemeName else { return }
+        // Re-theme only. Assigning the window's appearance here would undo the
+        // change that caused this call, and re-trigger it.
+        let theme = resolvedTheme(named: EditorTheme.systemThemeName)
+        for editor in allEditors { editor.applyTheme(theme) }
+        repaintChrome()
+        refreshUI()
     }
 
     /// Re-applies key equivalents from the Shortcut Mapper onto the menu bar.

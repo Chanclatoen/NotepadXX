@@ -141,7 +141,7 @@ public final class MainWindowController: NSWindowController {
 
     private func buildLayout() {
         guard let window else { return }
-        let content = NSView()
+        let content = AppearanceObservingView()
 
         toolbar = DSToolbar()
         toolbar.commandTarget = self
@@ -242,6 +242,7 @@ public final class MainWindowController: NSWindowController {
             dropView.bottomAnchor.constraint(equalTo: content.bottomAnchor),
         ])
 
+        content.onAppearanceChange = { [weak self] in self?.appearanceDidChange() }
         window.contentView = content
     }
 
@@ -638,6 +639,17 @@ public final class MainWindowController: NSWindowController {
     @objc public func goToLineAction(_ sender: Any?) {
         // Placeholder until the Go To dialog lands; keeps the menu item live.
         NSSound.beep()
+    }
+}
+
+/// The window's content view, which reports appearance changes so a
+/// system-following theme can be re-applied.
+final class AppearanceObservingView: NSView {
+    var onAppearanceChange: (() -> Void)?
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        onAppearanceChange?()
     }
 }
 

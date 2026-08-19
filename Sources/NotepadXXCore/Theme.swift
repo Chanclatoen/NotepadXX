@@ -44,47 +44,54 @@ public struct EditorTheme: Codable, Equatable, Sendable {
 
     public func color(for token: TokenType) -> String? { tokenColors[token.rawValue] }
 
+    /// The design's dark palette. The values are the design's own, so the
+    /// editor and the window chrome are the same set of colours rather than
+    /// two palettes that happen to sit next to each other.
     public static let defaultDark = EditorTheme(
         name: "Default Dark", isDark: true,
         tokenColors: [
-            TokenType.comment.rawValue: "#6A9955",
-            TokenType.commentLine.rawValue: "#6A9955",
-            TokenType.string.rawValue: "#CE9178",
-            TokenType.character.rawValue: "#CE9178",
-            TokenType.number.rawValue: "#B5CEA8",
-            TokenType.keyword1.rawValue: "#569CD6",
-            TokenType.keyword2.rawValue: "#4EC9B0",
-            TokenType.keyword3.rawValue: "#DCDCAA",
-            TokenType.keyword4.rawValue: "#C586C0",
-            TokenType.preprocessor.rawValue: "#9B9B9B",
-            TokenType.operatorToken.rawValue: "#D4D4D4",
+            TokenType.comment.rawValue: "#7F8C98",
+            TokenType.commentLine.rawValue: "#7F8C98",
+            TokenType.string.rawValue: "#FF8170",
+            TokenType.character.rawValue: "#FF8170",
+            TokenType.number.rawValue: "#D0BF69",
+            TokenType.keyword1.rawValue: "#FC5FA3",
+            TokenType.keyword2.rawValue: "#6BDFFF",
+            TokenType.keyword3.rawValue: "#67B7A4",
+            TokenType.keyword4.rawValue: "#D9C97C",
+            TokenType.preprocessor.rawValue: "#D9C97C",
+            TokenType.operatorToken.rawValue: "#E3E3E6",
         ],
-        background: "#1E1E1E", foreground: "#D4D4D4",
-        currentLineBackground: "#2A2D2E", selectionBackground: "#264F78",
-        gutterForeground: "#858585"
+        background: "#1D1E20", foreground: "#E3E3E6",
+        currentLineBackground: "#25272B", selectionBackground: "#2C4A73",
+        gutterForeground: "#6C6D72"
     )
 
+    /// The design's light palette.
     public static let defaultLight = EditorTheme(
         name: "Default Light", isDark: false,
         tokenColors: [
-            TokenType.comment.rawValue: "#008000",
-            TokenType.commentLine.rawValue: "#008000",
-            TokenType.string.rawValue: "#A31515",
-            TokenType.character.rawValue: "#A31515",
-            TokenType.number.rawValue: "#098658",
-            TokenType.keyword1.rawValue: "#0000FF",
-            TokenType.keyword2.rawValue: "#267F99",
-            TokenType.keyword3.rawValue: "#795E26",
-            TokenType.keyword4.rawValue: "#AF00DB",
-            TokenType.preprocessor.rawValue: "#808080",
-            TokenType.operatorToken.rawValue: "#000000",
+            TokenType.comment.rawValue: "#5D6C79",
+            TokenType.commentLine.rawValue: "#5D6C79",
+            TokenType.string.rawValue: "#C41A16",
+            TokenType.character.rawValue: "#C41A16",
+            TokenType.number.rawValue: "#1C00CF",
+            TokenType.keyword1.rawValue: "#9B2393",
+            TokenType.keyword2.rawValue: "#0F68A0",
+            TokenType.keyword3.rawValue: "#326D74",
+            TokenType.keyword4.rawValue: "#836C28",
+            TokenType.preprocessor.rawValue: "#836C28",
+            TokenType.operatorToken.rawValue: "#1F2024",
         ],
-        background: "#FFFFFF", foreground: "#000000",
-        currentLineBackground: "#F0F0F0", selectionBackground: "#ADD6FF",
-        gutterForeground: "#237893"
+        background: "#FFFFFF", foreground: "#1F2024",
+        currentLineBackground: "#F5F7FC", selectionBackground: "#B4D5FE",
+        gutterForeground: "#B2B2B8"
     )
 
     public static let builtIn: [EditorTheme] = [.defaultDark, .defaultLight]
+
+    /// The name that means "whatever appearance the Mac is in".
+    public static let systemThemeName = "System"
 }
 
 /// Loads and saves user themes alongside the built-ins.

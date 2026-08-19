@@ -1,5 +1,6 @@
 import AppKit
 import NotepadXXCore
+import NotepadXXDesign
 
 public final class AppDelegate: NSObject, NSApplicationDelegate {
     public override init() { super.init() }
@@ -52,6 +53,23 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if documents.isEmpty && !openedFromCommandLine {
             windowController.newDocument()
+        }
+
+        // Screenshot controls: size, appearance and tab count, so the same
+        // build can be photographed in every state the design specifies.
+        if let size = ProcessInfo.processInfo.environment["NOTEPADXX_SIZE"] {
+            let parts = size.split(separator: "x").compactMap { Double($0) }
+            if parts.count == 2 {
+                windowController.window?.setContentSize(NSSize(width: parts[0], height: parts[1]))
+            }
+        }
+        if let count = ProcessInfo.processInfo.environment["NOTEPADXX_TABS"].flatMap(Int.init) {
+            while windowController.documents.count < count { windowController.newDocument() }
+            windowController.selectTab(at: 0)
+        }
+        if let layout = ProcessInfo.processInfo.environment["NOTEPADXX_TAB_LAYOUT"],
+           let parsed = DocumentTabStrip.Layout(rawValue: layout) {
+            windowController.setTabLayout(parsed)
         }
 
         // Demo mode drives the new display options for screenshot verification.
@@ -149,6 +167,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // verifying the UI where screen capture is unavailable.
         if let path = options.screenshotPath {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                // Set last: the theme applies a window appearance of its own,
+                // so an override made earlier would be overwritten.
+                if let appearance = ProcessInfo.processInfo.environment["NOTEPADXX_APPEARANCE"] {
+                    let named: NSAppearance.Name = appearance == "dark" ? .darkAqua : .aqua
+                    NSApp.appearance = NSAppearance(named: named)
+                    for window in NSApp.windows { window.appearance = NSAppearance(named: named) }
+                }
                 let title = ProcessInfo.processInfo.environment["NOTEPADXX_CAPTURE_WINDOW"]
                 if let title, WindowCapture.writePNG(ofWindowTitled: title, to: path) {
                     // captured the named auxiliary window

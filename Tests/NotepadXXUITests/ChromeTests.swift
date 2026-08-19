@@ -124,8 +124,32 @@ final class ChromeThemeTests: XCTestCase {
         XCTAssertNil(chrome.appearance, "no theme means follow the system")
     }
 
-    /// Notepad++ ships light; defaulting to dark made the app look unlike it.
-    func testDefaultThemeIsLight() {
-        XCTAssertEqual(Preferences().themeName, "Default Light")
+    /// The default follows the Mac. Notepad++ ships light, and on a light Mac
+    /// this resolves to the light palette; what it must never do is leave a
+    /// light editor sitting inside dark chrome.
+    func testDefaultThemeFollowsTheSystemAppearance() throws {
+        XCTAssertEqual(Preferences().themeName, EditorTheme.systemThemeName)
+
+        let controller = MainWindowController()
+        let window = try XCTUnwrap(controller.window)
+
+        window.appearance = NSAppearance(named: .aqua)
+        XCTAssertFalse(controller.isDarkAppearance, "the window is in light mode")
+        XCTAssertEqual(controller.resolvedTheme(named: EditorTheme.systemThemeName).name,
+                       EditorTheme.defaultLight.name)
+
+        window.appearance = NSAppearance(named: .darkAqua)
+        XCTAssertTrue(controller.isDarkAppearance, "the window is in dark mode")
+        XCTAssertEqual(controller.resolvedTheme(named: EditorTheme.systemThemeName).name,
+                       EditorTheme.defaultDark.name)
+    }
+
+    /// A theme the user picked by name keeps its own palette whatever the Mac
+    /// is doing.
+    func testAnExplicitThemeIgnoresTheSystemAppearance() throws {
+        let controller = MainWindowController()
+        let window = try XCTUnwrap(controller.window)
+        window.appearance = NSAppearance(named: .darkAqua)
+        XCTAssertEqual(controller.resolvedTheme(named: "Default Light").name, "Default Light")
     }
 }

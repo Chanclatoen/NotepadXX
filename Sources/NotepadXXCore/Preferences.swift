@@ -76,7 +76,9 @@ public struct Preferences: Codable, Equatable, Sendable {
     // MARK: - Appearance
     public var fontName: String = "SF Mono"
     public var fontSize: Double = 12
-    public var themeName: String = "Default Light"
+    /// "System" follows the appearance the Mac is in, so the editor and the
+    /// window chrome are never light and dark at the same time.
+    public var themeName: String = "System"
 
     public init() {}
 

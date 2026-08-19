@@ -124,7 +124,9 @@ public final class PreferencesWindowController: NSWindowController {
         )
         window.title = "Preferences"
         super.init(window: window)
-        pages = Self.makePages(themeNames: themeStore?.allThemes.map(\.name) ?? ["System"])
+        // "System" comes first: it is the default, and it follows the Mac.
+        pages = Self.makePages(
+            themeNames: [EditorTheme.systemThemeName] + (themeStore?.allThemes.map(\.name) ?? []))
         buildLayout()
         showPage(at: 0)
     }
