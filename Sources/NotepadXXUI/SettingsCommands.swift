@@ -54,6 +54,8 @@ extension MainWindowController {
             editor.autoCompleteMinimumCharacters = preferences.autoCompletionMinimumCharacters
             editor.pathCompletionEnabled = preferences.pathCompletion
             editor.showCallTips = preferences.showCallTips
+            editor.closeBracketsEnabled = preferences.closeBracketsAndQuotes
+            editor.closeTagsEnabled = preferences.closeTags
             editor.autoIndentEnabled = preferences.autoIndent
             editor.showsCurrentLineHighlight = preferences.highlightCurrentLine
             editor.showWrapSymbol = preferences.showWrapSymbol

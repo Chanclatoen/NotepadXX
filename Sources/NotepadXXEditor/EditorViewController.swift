@@ -96,6 +96,12 @@ public final class EditorViewController: NSViewController {
 
     /// Caret width in points, from Preferences.
     public var caretWidth: CGFloat = 1 { didSet { applyCaretAppearance() } }
+    /// Closes brackets and quotes as they are typed.
+    public var closeBracketsEnabled = false
+    /// Closes XML and HTML tags when `>` is typed.
+    public var closeTagsEnabled = false
+    private var isAutoClosing = false
+
     /// Whether this editor's pane holds the focus. An unfocused pane keeps its
     /// text but drops the current-line tint and the caret, so the live half of
     /// a split is obvious.
@@ -237,6 +243,43 @@ public final class EditorViewController: NSViewController {
         isAutoIndenting = true
         textView.replaceCharacters(in: NSRange(location: caret, length: 0), with: indent)
         isAutoIndenting = false
+    }
+
+    /// Closes brackets, quotes and tags as they are typed.
+    ///
+    /// Like auto-indent this runs after the character has landed, because the
+    /// engine owns text input; the guard stops the inserted closer from being
+    /// treated as another keystroke.
+    func applyAutoCloseIfNeeded(inserted: String) {
+        guard !isAutoClosing, inserted.count == 1, let typed = inserted.first else { return }
+        let caret = selectedRange.location
+
+        if closeBracketsEnabled {
+            switch AutoClose.action(for: typed, in: textView.string, caret: caret) {
+            case .close(let closer):
+                isAutoClosing = true
+                textView.replaceCharacters(in: NSRange(location: caret, length: 0), with: closer)
+                // The caret belongs between the pair, not after it.
+                selectedRange = NSRange(location: caret, length: 0)
+                isAutoClosing = false
+                return
+            case .skip:
+                // Step over the closer that is already there.
+                textView.replaceCharacters(in: NSRange(location: caret - 1, length: 1), with: "")
+                selectedRange = NSRange(location: caret, length: 0)
+                return
+            case .none:
+                break
+            }
+        }
+
+        if closeTagsEnabled, typed == ">",
+           let closing = AutoClose.closingTag(after: caret, in: textView.string) {
+            isAutoClosing = true
+            textView.replaceCharacters(in: NSRange(location: caret, length: 0), with: closing)
+            selectedRange = NSRange(location: caret, length: 0)
+            isAutoClosing = false
+        }
     }
 
     /// Highlights marked ranges, one list per Mark style.
@@ -757,9 +800,26 @@ public final class EditorViewController: NSViewController {
     }
 
     /// Replaces just the selected range.
+    /// Replaces the selection and leaves the caret after what was inserted.
+    ///
+    /// Without moving the caret, two insertions in a row land in the wrong
+    /// order — a macro that types "don't" produced "t'nod", and pasting twice
+    /// reversed the two pastes.
     public func replaceSelection(with replacement: String) {
         let selection = selectedRange
         textView.replaceCharacters(in: selection, with: replacement)
+        let end = selection.location + (replacement as NSString).length
+        selectedRange = NSRange(location: min(end, (textView.string as NSString).length), length: 0)
+        onTextChange?(textView.string)
+    }
+
+    /// Replaces the selection and keeps it selected, for transforms where the
+    /// user is still working with the same text.
+    public func replaceSelectionKeepingSelection(with replacement: String) {
+        let selection = selectedRange
+        textView.replaceCharacters(in: selection, with: replacement)
+        selectedRange = NSRange(location: selection.location,
+                                length: (replacement as NSString).length)
         onTextChange?(textView.string)
     }
 
@@ -859,6 +919,7 @@ extension EditorViewController: @preconcurrency TextViewDelegate {
         updateGutterWidth()
         refreshFoldMarkers()
         applyAutoIndentIfNeeded(inserted: string, at: range)
+        applyAutoCloseIfNeeded(inserted: string)
         if !string.isEmpty { onTextInserted?(string) }
         updateCompletions(afterInserting: string)
         onTextChange?(textView.string)

@@ -67,6 +67,8 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var autoCompletionMinimumCharacters: Int = 3
     public var showCallTips: Bool = true
     public var pathCompletion: Bool = true
+    public var closeBracketsAndQuotes: Bool = true
+    public var closeTags: Bool = true
 
     // MARK: - Searching
     public var searchWrapAround: Bool = true

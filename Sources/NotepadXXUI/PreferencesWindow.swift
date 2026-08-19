@@ -276,7 +276,9 @@ public final class PreferencesWindowController: NSWindowController {
                                                   ("File paths", \.pathCompletion)]),
                     ]),
                     Group("Assistance", [
-                        .toggles("Call tips", [("Show parameter call tips", \.showCallTips)]),
+                        .toggles("While typing", [("Show parameter call tips", \.showCallTips),
+                                                  ("Close brackets and quotes", \.closeBracketsAndQuotes),
+                                                  ("Close XML and HTML tags", \.closeTags)]),
                     ]),
                  ]),
 

@@ -26,7 +26,10 @@ extension MainWindowController {
         let selection = editor.selectedRange
         if selection.length > 0 {
             let content = editor.text as NSString
-            editor.replaceSelection(with: transform(content.substring(with: selection)))
+            // A case change or a sort leaves the same text selected, so it can
+            // be transformed again or replaced.
+            editor.replaceSelectionKeepingSelection(
+                with: transform(content.substring(with: selection)))
         } else {
             editor.replaceAll(with: transform(editor.text))
         }
