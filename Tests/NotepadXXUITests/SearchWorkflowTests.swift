@@ -317,10 +317,16 @@ final class FindInFilesProgressTests: XCTestCase {
         // performFindInFiles returned immediately: the scan is elsewhere.
         XCTAssertEqual(controller.installedFindPanel?.isScanning, true)
 
-        let deadline = Date().addingTimeInterval(10)
-        while controller.installedFindPanel?.isScanning == true, Date() < deadline {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
-        }
+        // A predicate expectation, not a run-loop spin: the results arrive on
+        // the main queue, and only this drains it reliably on a loaded CI box.
+        let finished = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                MainActor.assumeIsolated { controller.searchResultsPanel?.fileCount == 60 }
+            },
+            object: nil)
+        wait(for: [finished], timeout: 60)
+
         XCTAssertEqual(controller.searchResultsPanel?.fileCount, 60)
+        XCTAssertEqual(controller.installedFindPanel?.isScanning, false)
     }
 }
