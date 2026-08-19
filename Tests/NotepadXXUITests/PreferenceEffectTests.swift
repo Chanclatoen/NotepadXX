@@ -131,8 +131,8 @@ final class PreferenceEffectTests: XCTestCase {
         // code reads is a setting that silently does nothing.
         let pages = PreferencesWindowController.makePages(themeNames: ["System"])
         XCTAssertFalse(pages.isEmpty)
-        let labels = pages.flatMap(\.controls).map(\.label)
-        XCTAssertEqual(Set(labels).count, labels.count, "two controls share a label: \(labels)")
+        let keyPaths = pages.flatMap(\.controls).flatMap(\.boundKeyPaths)
+        XCTAssertEqual(Set(keyPaths).count, keyPaths.count, "a preference is bound by two controls")
     }
 }
 

@@ -86,6 +86,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "prefs" {
             windowController.showPreferencesAction(nil)
+            // Any page can be photographed, so the previews and the search can
+            // be checked as well as the first page.
+            if let page = ProcessInfo.processInfo.environment["NOTEPADXX_PREFS_PAGE"].flatMap(Int.init) {
+                windowController.preferencesWindow?.selectPage(at: page)
+            }
+            if let query = ProcessInfo.processInfo.environment["NOTEPADXX_PREFS_SEARCH"] {
+                windowController.preferencesWindow?.search(for: query)
+            }
         }
         if ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "shortcuts" {
             windowController.showShortcutMapperAction(nil)

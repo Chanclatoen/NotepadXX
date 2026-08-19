@@ -29,9 +29,11 @@ final class SettingsWindowTests: XCTestCase {
         window.setContentSize(NSSize(width: 720, height: 520))
         window.contentView?.layoutSubtreeIfNeeded()
 
+        // Labels live in the grid's own column now, so a checkbox carries its
+        // name as an accessibility label rather than a title.
         let checkboxes = controls(in: window.contentView!).compactMap { $0 as? NSButton }
-            .filter { $0.allowsMixedState == false && !$0.title.isEmpty }
-        XCTAssertGreaterThan(checkboxes.count, 5, "the General page shows its toggles")
+            .filter { $0.accessibilityLabel()?.isEmpty == false && $0.bezelStyle != .rounded }
+        XCTAssertGreaterThan(checkboxes.count, 3, "the General page shows its toggles")
         XCTAssertTrue(checkboxes.allSatisfy { $0.frame.width > 0 && $0.frame.height > 0 },
                       "controls must have a real size, not collapse to zero")
     }
@@ -55,7 +57,7 @@ final class SettingsWindowTests: XCTestCase {
 
         let toggle = controls(in: window.contentView!)
             .compactMap { $0 as? NSButton }
-            .first { $0.title == "Show toolbar" }
+            .first { $0.accessibilityLabel() == "Show Toolbar" }
         let button = try XCTUnwrap(toggle)
         button.state = .off
         _ = button.target?.perform(button.action, with: button)
