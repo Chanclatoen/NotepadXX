@@ -526,7 +526,7 @@ public final class MainWindowController: NSWindowController {
         if bar.superview == nil {
             bar.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(bar)
-            let height = bar.heightAnchor.constraint(equalToConstant: 28)
+            let height = bar.heightAnchor.constraint(equalToConstant: IncrementalSearchBar.height)
             incrementalHeightConstraint = height
             NSLayoutConstraint.activate([
                 bar.leadingAnchor.constraint(equalTo: content.leadingAnchor),

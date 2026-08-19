@@ -104,16 +104,31 @@ extension MainWindowController {
                     bar.showNotFound(false)
                     return
                 }
+                // Report the position in the match list, not merely that
+                // something was found: "4 of 17" says how much is left.
+                let all = Occurrences.all(of: query, in: editor.text)
                 if let match = Occurrences.next(of: query, in: editor.text,
                                                 after: self.incrementalOrigin - 1) {
                     editor.selectedRange = match
                     editor.scrollRangeToVisible(match)
-                    bar.showNotFound(false)
+                    let index = (all.firstIndex { $0.location == match.location } ?? 0) + 1
+                    bar.showMatch(index, of: all.count)
+                    // Wrapping past the end is worth saying, since the caret
+                    // appears to jump backwards.
+                    if match.location < self.incrementalOrigin, all.count > 1 {
+                        bar.showNotFound(false)
+                    }
                 } else {
-                    bar.showNotFound(true)
+                    bar.showNotFound(true, wrapped: !all.isEmpty)
                 }
             }
             bar.onNext = { [weak self] in self?.findNextAction(nil) }
+            bar.onPrevious = { [weak self] in self?.findPreviousAction(nil) }
+            bar.onOptionsChanged = { [weak self] in
+                // Re-run the search so a changed option takes effect on what
+                // is already typed, rather than only on the next keystroke.
+                self?.incrementalBar.map { $0.onQueryChanged?($0.query) }
+            }
             bar.onCancel = { [weak self] in
                 guard let self else { return }
                 self.currentEditor?.selectedRange = NSRange(location: self.incrementalOrigin, length: 0)
