@@ -1,5 +1,7 @@
 # NotepadXX
 
+<img src="docs/screenshots/app-icon.png" alt="NotepadXX icon" width="128" align="right">
+
 Notepad++ for macOS. Native Swift/AppKit, MIT licensed.
 
 Not a "Mac editor inspired by Notepad++" — the goal is functional parity. The
@@ -102,6 +104,8 @@ build is never described as more blessed than it is.
 
 - `docs/ARCHITECTURE.md` — engine choice, the performance rule, rejected
   dependencies and why
+- `scripts/make-icon.swift` — the app icon, drawn from the design tokens rather
+  than kept as a binary blob, and simplified at small sizes
 - `docs/parity/` — the full Notepad++ command matrices
 - `docs/ROADMAP.md` — order of work
 

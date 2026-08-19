@@ -14,6 +14,14 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/NotepadXX"
 
+# The icon is generated from scripts/make-icon.swift, so it is drawn from the
+# same design tokens as the app rather than kept as an opaque binary blob.
+if [[ ! -f Resources/AppIcon.icns ]] || [[ scripts/make-icon.swift -nt Resources/AppIcon.icns ]]; then
+  swift scripts/make-icon.swift Resources >/dev/null
+  iconutil -c icns Resources/AppIcon.iconset -o Resources/AppIcon.icns
+fi
+cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -23,6 +31,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleDisplayName</key><string>NotepadXX</string>
     <key>CFBundleIdentifier</key><string>nl.jmour.notepadxx</string>
     <key>CFBundleExecutable</key><string>NotepadXX</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
+    <key>CFBundleIconName</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
     <key>CFBundleVersion</key><string>1</string>
