@@ -1,0 +1,23 @@
+#!/bin/bash
+# Refuses to push anything that does not build and pass its tests.
+#
+# A broken commit reached main once because the local gate built debug while
+# CI built release. check.sh now does both; this makes running it mandatory
+# rather than remembered.
+#
+# Enable with: ./scripts/setup-hooks.sh   (or skip once with --no-verify)
+set -uo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+echo "pre-push: building and testing before push…"
+if ./scripts/check.sh > /tmp/npxx-prepush.log 2>&1; then
+  echo "pre-push: OK"
+  exit 0
+fi
+
+echo "pre-push: FAILED — push aborted. Last 30 lines:" >&2
+tail -30 /tmp/npxx-prepush.log >&2
+echo >&2
+echo "Full log: /tmp/npxx-prepush.log" >&2
+echo "To push anyway: git push --no-verify" >&2
+exit 1
