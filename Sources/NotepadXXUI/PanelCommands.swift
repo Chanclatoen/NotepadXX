@@ -54,6 +54,7 @@ extension MainWindowController {
             project.root.filePaths.removeAll { $0 == path }
             try? store.save(project)
         }
+        projects.onCreateProject = { [weak self] in self?.newProjectAction(nil) }
         self.projectPanel = projects
 
         // Search Results docks at the bottom like any other panel, so it can

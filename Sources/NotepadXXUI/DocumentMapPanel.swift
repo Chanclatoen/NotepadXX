@@ -1,5 +1,6 @@
 import AppKit
 import NotepadXXCore
+import NotepadXXDesign
 
 /// Document Map: a scaled-down overview of the whole file with a viewport
 /// indicator, click to jump.
@@ -55,8 +56,11 @@ private final class MapView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.textBackgroundColor.setFill()
-        dirtyRect.fill()
+        DS.Color.content.setFill()
+        // Fill this view's own bounds. `dirtyRect` can be larger than the view
+        // when the tree is rendered through its layer, and filling it paints
+        // over whatever sits above — here, the panel's own header.
+        bounds.intersection(dirtyRect).fill()
         guard !lineLengths.isEmpty, bounds.height > 0 else { return }
 
         let scale = bounds.height / CGFloat(lineLengths.count)
@@ -64,7 +68,7 @@ private final class MapView: NSView {
         let widest = CGFloat(max(1, lineLengths.max() ?? 1))
         let usableWidth = bounds.width - 8
 
-        NSColor.secondaryLabelColor.withAlphaComponent(0.6).setFill()
+        DS.Color.textTertiary.setFill()
         for (index, length) in lineLengths.enumerated() where length > 0 {
             let y = CGFloat(index) * scale
             // Clamp so a very long line does not run past the panel.
@@ -72,12 +76,15 @@ private final class MapView: NSView {
             NSRect(x: 4, y: y, width: width, height: barHeight).fill()
         }
 
-        // Viewport indicator.
+        // Viewport indicator — only when there is something out of view. With
+        // the whole document on screen the indicator would cover the map and
+        // mark nothing.
+        guard visibleLines.count < lineLengths.count else { return }
         let top = CGFloat(visibleLines.lowerBound) * scale
         let height = max(4, CGFloat(visibleLines.count) * scale)
-        NSColor.controlAccentColor.withAlphaComponent(0.20).setFill()
+        DS.Color.brandTint.setFill()
         NSRect(x: 0, y: top, width: bounds.width, height: height).fill()
-        NSColor.controlAccentColor.withAlphaComponent(0.6).setStroke()
+        DS.Color.brand.setStroke()
         NSBezierPath(rect: NSRect(x: 0.5, y: top + 0.5, width: bounds.width - 1, height: height - 1)).stroke()
     }
 

@@ -1,4 +1,5 @@
 import AppKit
+import NotepadXXDesign
 import NotepadXXCore
 
 /// Function List: symbols in the current document, click to jump.
@@ -17,6 +18,7 @@ public final class FunctionListPanel: NSObject, DockablePanel {
     private let container = NSView()
     private var symbols: [Symbol] = []
     private var filtered: [Symbol] = []
+    private var placeholder: DSEmptyState?
 
     public override init() {
         super.init()
@@ -51,6 +53,11 @@ public final class FunctionListPanel: NSObject, DockablePanel {
             scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
+        placeholder = PanelPlaceholder.install(
+            in: container, over: scrollView,
+            symbol: "function",
+            title: "No symbols",
+            message: "This document has nothing to list, or its language has no symbol rules yet.")
     }
 
     public var contentView: NSView { container }
@@ -68,6 +75,7 @@ public final class FunctionListPanel: NSObject, DockablePanel {
             ? symbols
             : symbols.filter { $0.name.localizedCaseInsensitiveContains(query) }
         tableView.reloadData()
+        PanelPlaceholder.show(placeholder, whenEmpty: filtered.isEmpty, hiding: scrollView)
     }
 
     @objc private func filterChanged() { applyFilter() }
@@ -95,6 +103,7 @@ extension FunctionListPanel: NSTableViewDataSource, NSTableViewDelegate {
 /// Folder as Workspace: browse a directory tree, click to open a file.
 @MainActor
 public final class FolderWorkspacePanel: NSObject, DockablePanel {
+    private var placeholder: DSEmptyState?
     public let panelIdentifier = "folderWorkspace"
     public let panelTitle = "Folder as Workspace"
     public let preferredPosition = DockPosition.left
@@ -124,15 +133,37 @@ public final class FolderWorkspacePanel: NSObject, DockablePanel {
         outlineView.doubleAction = #selector(rowActivated)
         scrollView.documentView = outlineView
         scrollView.hasVerticalScroller = true
+
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(scrollView)
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: container.topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+        placeholder = PanelPlaceholder.install(
+            in: container, over: scrollView,
+            symbol: "folder.badge.plus",
+            title: "Drop a folder",
+            message: "Drag a folder here, or use File ▸ Folder as Workspace.")
+        updatePlaceholder()
     }
 
-    public var contentView: NSView { scrollView }
+    private let container = NSView()
+
+    private func updatePlaceholder() {
+        PanelPlaceholder.show(placeholder, whenEmpty: roots.isEmpty, hiding: scrollView)
+    }
+
+    public var contentView: NSView { container }
 
     public func addRoot(_ url: URL) {
         guard !roots.contains(url) else { return }
         roots.append(url)
         childrenCache.removeAll()
         outlineView.reloadData()
+        updatePlaceholder()
     }
 
     public func removeAllRoots() {
@@ -203,6 +234,7 @@ extension FolderWorkspacePanel: NSOutlineViewDataSource, NSOutlineViewDelegate {
 /// limitation, not an omission.
 @MainActor
 public final class ClipboardHistoryPanel: NSObject, DockablePanel {
+    private var placeholder: DSEmptyState?
     public let panelIdentifier = "clipboardHistory"
     public let panelTitle = "Clipboard History"
     public let preferredPosition = DockPosition.right
@@ -229,7 +261,29 @@ public final class ClipboardHistoryPanel: NSObject, DockablePanel {
         tableView.doubleAction = #selector(rowActivated)
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
+
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(scrollView)
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: container.topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+        placeholder = PanelPlaceholder.install(
+            in: container, over: scrollView,
+            symbol: "doc.on.clipboard",
+            title: "Nothing copied yet",
+            message: "The last \(maximumEntries) clippings appear here. "
+                + "History stays in memory and is never written to disk.")
+        updatePlaceholder()
         startPolling()
+    }
+
+    private let container = NSView()
+
+    private func updatePlaceholder() {
+        PanelPlaceholder.show(placeholder, whenEmpty: entries.isEmpty, hiding: scrollView)
     }
 
     /// Stops pasteboard polling. Call before discarding the panel.
@@ -238,7 +292,7 @@ public final class ClipboardHistoryPanel: NSObject, DockablePanel {
         timer = nil
     }
 
-    public var contentView: NSView { scrollView }
+    public var contentView: NSView { container }
 
     private func startPolling() {
         timer = Timer.scheduledTimer(withTimeInterval: 0.75, repeats: true) { [weak self] _ in
@@ -260,6 +314,7 @@ public final class ClipboardHistoryPanel: NSObject, DockablePanel {
         entries.insert(text, at: 0)
         if entries.count > maximumEntries { entries.removeLast(entries.count - maximumEntries) }
         tableView.reloadData()
+        updatePlaceholder()
     }
 
     var recordedEntries: [String] { entries }

@@ -923,7 +923,7 @@ final class PreferencePreviewView: NSView {
 final class PreferencesBackgroundView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         DS.Color.windowBackground.setFill()
-        dirtyRect.fill()
+        bounds.intersection(dirtyRect).fill()
     }
 }
 

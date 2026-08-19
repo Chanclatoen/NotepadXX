@@ -102,7 +102,7 @@ public final class GutterView: NSView {
 
     public override func draw(_ dirtyRect: NSRect) {
         backgroundColor.setFill()
-        dirtyRect.fill()
+        bounds.intersection(dirtyRect).fill()
         guard let textView, let layoutManager = textView.layoutManager,
               let clipView = textView.enclosingScrollView?.contentView else { return }
 

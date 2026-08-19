@@ -1,4 +1,5 @@
 import AppKit
+import NotepadXXDesign
 import NotepadXXCore
 
 /// A docked tree of the active project's files.
@@ -41,9 +42,34 @@ public final class ProjectPanel: NSObject, DockablePanel {
         outlineView.menu = makeContextMenu()
         scrollView.documentView = outlineView
         scrollView.hasVerticalScroller = true
+        installContainer()
     }
 
-    public var contentView: NSView { scrollView }
+    private let container = NSView()
+    private var placeholder: DSEmptyState?
+
+    /// Called when the placeholder's button is pressed.
+    public var onCreateProject: (() -> Void)?
+
+    public var contentView: NSView { container }
+
+    /// Builds the container the placeholder needs. Called from init.
+    private func installContainer() {
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(scrollView)
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: container.topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+        placeholder = PanelPlaceholder.install(
+            in: container, over: scrollView,
+            symbol: "folder.badge.gearshape",
+            title: "No project open",
+            message: "Create a project to group files, sessions and run commands.",
+            actionTitle: "New Project…") { [weak self] in self?.onCreateProject?() }
+    }
 
     public func panelDidBecomeVisible() { reload() }
 
@@ -51,6 +77,7 @@ public final class ProjectPanel: NSObject, DockablePanel {
         project = projectProvider?()
         outlineView.reloadData()
         outlineView.expandItem(nil, expandChildren: true)
+        PanelPlaceholder.show(placeholder, whenEmpty: project == nil, hiding: scrollView)
     }
 
     private func makeContextMenu() -> NSMenu {
