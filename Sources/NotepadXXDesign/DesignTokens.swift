@@ -122,6 +122,8 @@ public enum DS {
 
         public static let searchMatch = dynamic(light: 0xFFE9A6, dark: 0x5E5326)
         public static let currentMatch = dynamic(light: 0x9EE8C4, dark: 0x1F5B45)
+        /// The editor's selection fill.
+        public static let selection = dynamic(light: 0xB4D5FE, dark: 0x2C4A73)
         public static let textSelection = dynamic(light: 0xB4D5FE, dark: 0x2C4A73)
 
         /// Toolbar interaction wells.

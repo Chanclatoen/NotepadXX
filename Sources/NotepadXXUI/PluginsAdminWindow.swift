@@ -1,5 +1,6 @@
 import AppKit
 import NotepadXXCore
+import NotepadXXDesign
 
 /// Plugins Admin: list, enable, install and remove plugins.
 @MainActor
@@ -65,17 +66,30 @@ public final class PluginsAdminWindowController: NSWindowController {
         scroll.documentView = tableView
         scroll.hasVerticalScroller = true
 
+        footnote.font = DS.Font.small()
+        footnote.textColor = DS.Color.textTertiary
+        footnote.stringValue = "Changes to enabled state take effect after relaunch. "
+            + "Plug-ins run sandboxed and are verified against their published checksum before install."
+        footnote.lineBreakMode = .byWordWrapping
+        footnote.maximumNumberOfLines = 2
+
+        let openFolder = NSButton(title: "Open Plug-ins Folder", target: self,
+                                  action: #selector(openPluginsFolderTapped))
+        let relaunch = NSButton(title: "Relaunch", target: self, action: #selector(relaunchTapped))
+        for button in [openFolder, relaunch] { button.bezelStyle = .rounded }
+
         let installSelected = NSButton(title: "Install", target: self, action: #selector(installSelectedTapped))
         let install = NSButton(title: "Install from Folder…", target: self, action: #selector(installTapped))
         let remove = NSButton(title: "Remove", target: self, action: #selector(removeTapped))
         let refresh = NSButton(title: "Refresh", target: self, action: #selector(refreshTapped))
         for button in [installSelected, install, remove, refresh] { button.bezelStyle = .rounded }
-        let buttons = NSStackView(views: [statusLabel, installSelected, install, remove, refresh])
+        let buttons = NSStackView(views: [statusLabel, NSView(), openFolder, relaunch,
+                                          installSelected, install, remove, refresh])
         buttons.orientation = .horizontal
         buttons.spacing = 8
 
         let content = NSView()
-        for subview in [tabControl, searchField, scroll, buttons] {
+        for subview in [tabControl, searchField, scroll, footnote, buttons] {
             subview.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(subview)
         }
@@ -88,7 +102,11 @@ public final class PluginsAdminWindowController: NSWindowController {
             scroll.topAnchor.constraint(equalTo: tabControl.bottomAnchor, constant: 12),
             scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12),
             scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12),
-            scroll.bottomAnchor.constraint(equalTo: buttons.topAnchor, constant: -10),
+            scroll.bottomAnchor.constraint(equalTo: footnote.topAnchor, constant: -10),
+            footnote.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12),
+            footnote.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12),
+            footnote.bottomAnchor.constraint(equalTo: buttons.topAnchor, constant: -8),
+            buttons.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12),
             buttons.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12),
             buttons.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -12),
         ])
@@ -123,7 +141,53 @@ public final class PluginsAdminWindowController: NSWindowController {
         }
     }
 
+    private let footnote = NSTextField(labelWithString: "")
+
+    /// Each tab carries its own count, so the work waiting in Updates is
+    /// visible without opening it.
+    private func updateTabCounts() {
+        let installed = registry.plugins.count
+        let available = repository.map { repo -> Int in
+            let have = Set(registry.plugins.map(\.id))
+            return repo.allListings.filter { !have.contains($0.identifier) }.count
+        } ?? 0
+        let updates = repository?.availableUpdates(installed: registry.plugins).count ?? 0
+
+        for (index, label) in [("Installed", installed), ("Available", available),
+                               ("Updates", updates)].enumerated() {
+            tabControl.setLabel(label.1 > 0 ? "\(label.0)  \(label.1)" : label.0, forSegment: index)
+        }
+    }
+
+    @objc private func openPluginsFolderTapped() {
+        let directory = registry.pluginsDirectory
+        // The folder may not exist yet on a fresh install; opening a missing
+        // path does nothing and looks like a broken button.
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(directory)
+    }
+
+    /// Enabling or disabling a plug-in only takes effect on a fresh launch, so
+    /// the window offers the relaunch rather than leaving the user to do it.
+    @objc private func relaunchTapped() {
+        guard let window else { return }
+        let alert = NSAlert()
+        alert.messageText = "Relaunch NotepadXX?"
+        alert.informativeText = "Open documents are restored. Unsaved edits are kept as snapshots."
+        alert.addButton(withTitle: "Relaunch")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { response in
+            guard response == .alertFirstButtonReturn else { return }
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            task.arguments = ["-n", Bundle.main.bundlePath]
+            try? task.run()
+            NSApp.terminate(nil)
+        }
+    }
+
     private func updateStatus() {
+        updateTabCounts()
         switch tab {
         case .installed:
             statusLabel.stringValue = "\(registry.plugins.count) installed"
