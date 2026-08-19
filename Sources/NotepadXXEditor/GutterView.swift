@@ -129,15 +129,27 @@ public final class GutterView: NSView {
         }
     }
 
+    /// The shape the change bar takes for a line, if any.
+    public enum ChangeBarShape: Equatable { case none, square, rounded }
+
     /// Amber square for an unsaved edit, green rounded bar once saved: the two
     /// differ in shape as well as hue, so the signal survives colour blindness.
+    public func changeBarShape(forLine line: Int) -> ChangeBarShape {
+        guard showChangeHistory else { return .none }
+        if changedLines.contains(line) { return .square }
+        if savedChangedLines.contains(line) { return .rounded }
+        return .none
+    }
+
     private func drawChangeBar(line: Int, y: CGFloat, height: CGFloat) {
-        guard showChangeHistory else { return }
         let rect = NSRect(x: changeLane.minX, y: y, width: changeLane.width, height: height)
-        if changedLines.contains(line) {
+        switch changeBarShape(forLine: line) {
+        case .none:
+            return
+        case .square:
             DS.Color.changeModified.setFill()
             rect.fill()
-        } else if savedChangedLines.contains(line) {
+        case .rounded:
             DS.Color.changeSaved.setFill()
             NSBezierPath(roundedRect: rect.insetBy(dx: 0, dy: 1),
                          xRadius: rect.width / 2, yRadius: rect.width / 2).fill()

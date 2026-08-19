@@ -256,12 +256,19 @@ public enum DS {
             NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
         }
 
+        /// The duration to actually use. Separated from `animate` so the
+        /// Reduce Motion behaviour can be checked without a system setting.
+        public static func duration(_ requested: TimeInterval, reduceMotion: Bool) -> TimeInterval {
+            reduceMotion ? 0 : requested
+        }
+
         /// Runs `body` animated, or immediately when Reduce Motion is on.
         @MainActor
         public static func animate(_ duration: TimeInterval, _ body: @escaping () -> Void) {
-            guard !reduceMotion else { body(); return }
+            let effective = Self.duration(duration, reduceMotion: reduceMotion)
+            guard effective > 0 else { body(); return }
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = duration
+                context.duration = effective
                 body()
             }
         }

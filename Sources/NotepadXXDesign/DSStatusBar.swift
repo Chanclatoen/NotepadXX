@@ -107,9 +107,11 @@ public final class DSStatusBar: NSView {
     public override func layout() {
         super.layout()
         // Choose density from the width available, then lay the segments out.
+        // The design's own widths: full labels at 1100, the shorter forms at
+        // 900, and two groups hidden entirely below 760.
         let newDensity: Density
-        if bounds.width >= 900 { newDensity = .full }
-        else if bounds.width >= 680 { newDensity = .medium }
+        if bounds.width >= 1100 { newDensity = .full }
+        else if bounds.width >= 760 { newDensity = .medium }
         else { newDensity = .compact }
 
         if newDensity != density {

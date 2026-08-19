@@ -224,6 +224,22 @@ public final class DockHostView: NSView {
             split.removeArrangedSubview(container)
             container.removeFromSuperview()
         }
+        applyHoldingPriorities()
+    }
+
+    /// Tells the split views which pane absorbs a resize.
+    ///
+    /// Without this the editor keeps whatever width it had when the panels
+    /// opened — it stayed a 203 pt sliver whether the window was 900 or 1440
+    /// wide, because the docks and the editor resisted resizing equally.
+    private func applyHoldingPriorities() {
+        for (split, centre) in [(innerSplit, centerContainer as NSView), (outerSplit, innerSplit)] {
+            for (index, subview) in split.arrangedSubviews.enumerated() {
+                // Docks hold their size; the editor takes the rest.
+                split.setHoldingPriority(subview === centre ? .defaultLow : .defaultHigh,
+                                         forSubviewAt: index)
+            }
+        }
     }
 
     /// Restores each visible dock to the size the user left it at.

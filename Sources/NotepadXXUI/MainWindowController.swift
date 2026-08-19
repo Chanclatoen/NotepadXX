@@ -66,7 +66,7 @@ public final class MainWindowController: NSWindowController {
     var bookmarks: [UUID: Bookmarks] = [:]
     var tabAttributes: [UUID: TabAttributes] = [:]
 
-    var editorSplit: NSSplitView!
+    var editorSplit: EvenSplitView!
     var secondaryContainer: NSView!
     private var secondaryActiveIndex = 0
     var dockHost: DockHostView?
@@ -166,7 +166,7 @@ public final class MainWindowController: NSWindowController {
 
         // The editor area is a split: the second pane appears only when a
         // document is moved or cloned into it.
-        editorSplit = NSSplitView()
+        editorSplit = EvenSplitView()
         editorSplit.isVertical = true
         editorSplit.dividerStyle = .thin
         editorContainer = NSView()
@@ -370,11 +370,11 @@ public final class MainWindowController: NSWindowController {
         if shouldShow && secondaryContainer.superview == nil {
             editorSplit.addArrangedSubview(secondaryContainer)
             // NSSplitView otherwise hands almost all the width to the new pane,
-            // collapsing the first to just its gutter. Split evenly once laid out.
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.editorSplit.arrangedSubviews.count > 1 else { return }
-                self.editorSplit.setPosition(self.editorSplit.bounds.width / 2, ofDividerAt: 0)
-            }
+            // collapsing the first to just its gutter. The even split is asked
+            // for rather than applied here: at this moment the split has not
+            // been laid out yet, so dividing by its current width would divide
+            // by the wrong number.
+            editorSplit.balanceOnNextLayout()
         } else if !shouldShow && secondaryContainer.superview != nil {
             editorSplit.removeArrangedSubview(secondaryContainer)
             secondaryContainer.removeFromSuperview()
@@ -638,5 +638,27 @@ public final class MainWindowController: NSWindowController {
     @objc public func goToLineAction(_ sender: Any?) {
         // Placeholder until the Go To dialog lands; keeps the menu item live.
         NSSound.beep()
+    }
+}
+
+/// A split view that can be asked to divide its panes evenly once it knows how
+/// wide it is.
+///
+/// Setting the divider position straight after adding a pane divides by the
+/// width the split had *before* layout, which left one pane a sliver however
+/// large the window was.
+public final class EvenSplitView: NSSplitView {
+    private var needsBalance = false
+
+    public func balanceOnNextLayout() {
+        needsBalance = true
+        needsLayout = true
+    }
+
+    public override func layout() {
+        super.layout()
+        guard needsBalance, arrangedSubviews.count > 1, bounds.width > 1 else { return }
+        needsBalance = false
+        setPosition(bounds.width / 2, ofDividerAt: 0)
     }
 }
