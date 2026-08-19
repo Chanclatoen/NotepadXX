@@ -113,3 +113,56 @@ final class DialogBehaviourTests: XCTestCase {
         XCTAssertTrue(controller.isSplit, "it opens beside, in the other pane")
     }
 }
+
+/// Prompts that concern one document belong to that document's window.
+@MainActor
+final class DocumentPromptsAreSheetsTests: XCTestCase {
+    private func makeWithFile() throws -> (MainWindowController, URL) {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("npxx-prompt-\(ProcessInfo.processInfo.globallyUniqueString).txt")
+        try "content".write(to: url, atomically: true, encoding: .utf8)
+
+        let controller = MainWindowController()
+        controller.adopt(documents: [try TextDocument.load(contentsOf: url)], activeIndex: 0)
+        controller.window?.setContentSize(NSSize(width: 1000, height: 700))
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        controller.showWindow(nil)
+        return (controller, url)
+    }
+
+    private func expectSheet(_ controller: MainWindowController, _ name: String) {
+        XCTAssertNotNil(controller.window?.attachedSheet, "\(name) is not attached to the window")
+        controller.window?.attachedSheet.map { controller.window?.endSheet($0) }
+    }
+
+    func testRenameAsksInASheet() throws {
+        let (controller, url) = try makeWithFile()
+        defer { try? FileManager.default.removeItem(at: url); controller.close() }
+        controller.renameFileAction(nil)
+        expectSheet(controller, "Rename")
+    }
+
+    func testMoveToTrashConfirmsInASheet() throws {
+        let (controller, url) = try makeWithFile()
+        defer { try? FileManager.default.removeItem(at: url); controller.close() }
+        controller.moveToTrashAction(nil)
+        expectSheet(controller, "Move to Trash")
+    }
+
+    func testReloadWithUnsavedEditsConfirmsInASheet() throws {
+        let (controller, url) = try makeWithFile()
+        defer { try? FileManager.default.removeItem(at: url); controller.close() }
+        controller.currentEditor?.replaceAll(with: "edited")
+        controller.activeDocument?.text = "edited"
+        controller.reloadFromDiskAction(nil)
+        expectSheet(controller, "Reload")
+    }
+
+    /// Saving a session is about this window's documents, so it asks here.
+    func testSaveSessionAsksInASheet() throws {
+        let (controller, url) = try makeWithFile()
+        defer { try? FileManager.default.removeItem(at: url); controller.close() }
+        controller.saveSessionAction(nil)
+        expectSheet(controller, "Save Session As")
+    }
+}

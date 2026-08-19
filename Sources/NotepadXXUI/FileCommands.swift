@@ -72,30 +72,23 @@ extension MainWindowController {
     @objc public func renameFileAction(_ sender: Any?) {
         guard let document = activeDocument, let url = document.fileURL else { NSSound.beep(); return }
 
-        let alert = NSAlert()
-        alert.messageText = "Rename “\(url.lastPathComponent)”"
-        let field = NSTextField(string: url.lastPathComponent)
-        field.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Rename")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-
-        let newName = field.stringValue.trimmingCharacters(in: .whitespaces)
-        guard !newName.isEmpty, newName != url.lastPathComponent else { return }
-        let destination = url.deletingLastPathComponent().appendingPathComponent(newName)
-        guard !FileManager.default.fileExists(atPath: destination.path) else {
-            presentError("A file named “\(newName)” already exists.", detail: nil)
-            return
-        }
-        do {
-            try FileManager.default.moveItem(at: url, to: destination)
-            document.relocate(to: destination)
-            recentFiles?.remove(url.path)
-            noteRecentlyOpened(destination)
-            refreshUI()
-        } catch {
-            presentError("Could not rename the file", detail: error.localizedDescription)
+        askForName(title: "Rename “\(url.lastPathComponent)”",
+                   message: "The file is renamed on disk.", confirm: "Rename") { [weak self] newName in
+            guard let self, newName != url.lastPathComponent else { return }
+            let destination = url.deletingLastPathComponent().appendingPathComponent(newName)
+            guard !FileManager.default.fileExists(atPath: destination.path) else {
+                self.presentError("A file named “\(newName)” already exists.", detail: nil)
+                return
+            }
+            do {
+                try FileManager.default.moveItem(at: url, to: destination)
+                document.relocate(to: destination)
+                self.recentFiles?.remove(url.path)
+                self.noteRecentlyOpened(destination)
+                self.refreshUI()
+            } catch {
+                self.presentError("Could not rename the file", detail: error.localizedDescription)
+            }
         }
     }
 
@@ -123,30 +116,45 @@ extension MainWindowController {
         guard let document = activeDocument, let url = document.fileURL else { NSSound.beep(); return }
         let confirm = NSAlert()
         confirm.messageText = "Move “\(url.lastPathComponent)” to the Trash?"
-        confirm.addButton(withTitle: "Move to Trash")
+        confirm.informativeText = "The document closes; the file can be put back from the Trash."
+        let trash = confirm.addButton(withTitle: "Move to Trash")
+        trash.hasDestructiveAction = true
         confirm.addButton(withTitle: "Cancel")
-        guard confirm.runModal() == .alertFirstButtonReturn else { return }
 
-        do {
-            try FileManager.default.trashItem(at: url, resultingItemURL: nil)
-            recentFiles?.remove(url.path)
-            rebuildRecentMenu()
-            closeTabAction(nil)
-        } catch {
-            presentError("Could not move the file to the Trash", detail: error.localizedDescription)
+        presentSheet(confirm) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            do {
+                try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+                self.recentFiles?.remove(url.path)
+                self.rebuildRecentMenu()
+                self.closeTabAction(nil)
+            } catch {
+                self.presentError("Could not move the file to the Trash",
+                                  detail: error.localizedDescription)
+            }
         }
     }
 
     @objc public func reloadFromDiskAction(_ sender: Any?) {
         guard let document = activeDocument, let url = document.fileURL else { NSSound.beep(); return }
-        if document.isDirty {
-            let confirm = NSAlert()
-            confirm.messageText = "Reload “\(url.lastPathComponent)” from disk?"
-            confirm.informativeText = "Unsaved changes will be lost."
-            confirm.addButton(withTitle: "Reload")
-            confirm.addButton(withTitle: "Cancel")
-            guard confirm.runModal() == .alertFirstButtonReturn else { return }
+        guard document.isDirty else {
+            reload(document, from: url)
+            return
         }
+        let confirm = NSAlert()
+        confirm.messageText = "Reload “\(url.lastPathComponent)” from disk?"
+        confirm.informativeText = "Unsaved changes will be lost."
+        let reload = confirm.addButton(withTitle: "Reload")
+        reload.hasDestructiveAction = true
+        confirm.addButton(withTitle: "Cancel")
+
+        presentSheet(confirm) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            self?.reload(document, from: url)
+        }
+    }
+
+    private func reload(_ document: TextDocument, from url: URL) {
         guard let reloaded = try? TextDocument.load(contentsOf: url) else {
             presentError("Could not reload the file", detail: nil)
             return
@@ -252,10 +260,11 @@ extension MainWindowController {
         refreshUI()
     }
 
+    /// Reports a problem with the document, as a sheet on its window.
     func presentError(_ message: String, detail: String?) {
         let alert = NSAlert()
         alert.messageText = message
         if let detail { alert.informativeText = detail }
-        alert.runModal()
+        presentSheet(alert) { _ in }
     }
 }

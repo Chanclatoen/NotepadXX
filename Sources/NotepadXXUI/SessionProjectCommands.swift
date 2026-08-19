@@ -6,19 +6,39 @@ extension MainWindowController {
 
     @objc public func saveSessionAction(_ sender: Any?) {
         guard let store = namedSessions else { return }
-        let alert = NSAlert()
-        alert.messageText = "Save session as"
-        let field = NSTextField(string: "")
-        field.frame = NSRect(x: 0, y: 0, width: 240, height: 24)
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        // A sheet on this window: the session being saved is this window's.
+        askForName(
+            title: "Save Session As",
+            message: "\(documents.count) document\(documents.count == 1 ? "" : "s") "
+                + "and their carets are stored under this name.",
+            confirm: "Save"
+        ) { [weak self] name in
+            guard let self else { return }
+            try? store.save(name: name, documents: self.documents, activeIndex: self.activeIndex)
+            self.rebuildSessionMenu()
+        }
+    }
 
-        let name = field.stringValue.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty else { return }
-        try? store.save(name: name, documents: documents, activeIndex: activeIndex)
-        rebuildSessionMenu()
+    /// Asks for a name in a sheet, and calls back only with a usable one.
+    func askForName(title: String, message: String, confirm: String,
+                    then handler: @escaping (String) -> Void) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        let field = NSTextField(string: "")
+        field.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
+        alert.accessoryView = field
+        alert.addButton(withTitle: confirm)
+        alert.addButton(withTitle: "Cancel")
+        // The field is what the sheet is for, so it starts focused.
+        alert.window.initialFirstResponder = field
+
+        presentSheet(alert) { response in
+            guard response == .alertFirstButtonReturn else { return }
+            let name = field.stringValue.trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty else { return }
+            handler(name)
+        }
     }
 
     @objc public func loadSessionAction(_ sender: Any?) {
@@ -89,23 +109,20 @@ extension MainWindowController {
 
     @objc public func newProjectAction(_ sender: Any?) {
         guard let store = projectStore else { return }
-        let alert = NSAlert()
-        alert.messageText = "New project"
-        let field = NSTextField(string: "")
-        field.frame = NSRect(x: 0, y: 0, width: 240, height: 24)
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Create")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-
-        let name = field.stringValue.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty else { return }
-        var project = Project(name: name)
-        // Seed with the open files, which is almost always what is wanted.
-        project.root.filePaths = documents.compactMap { $0.fileURL?.path }
-        try? store.save(project)
-        activeProjectName = name
-        rebuildProjectMenu()
+        askForName(
+            title: "New Project",
+            message: "The documents open now are added to it; you can add more later.",
+            confirm: "Create"
+        ) { [weak self] name in
+            guard let self else { return }
+            var project = Project(name: name)
+            // Seed with the open files, which is almost always what is wanted.
+            project.root.filePaths = self.documents.compactMap { $0.fileURL?.path }
+            try? store.save(project)
+            self.activeProjectName = name
+            self.rebuildProjectMenu()
+            self.projectPanel?.reload()
+        }
     }
 
     @objc public func openProjectAction(_ sender: Any?) {
