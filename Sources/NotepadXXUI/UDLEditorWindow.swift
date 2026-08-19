@@ -1,5 +1,6 @@
 import AppKit
 import NotepadXXCore
+import NotepadXXDesign
 
 /// "Define your language…" — the GUI for authoring a User Defined Language.
 ///
@@ -27,6 +28,8 @@ public final class UDLEditorWindowController: NSWindowController {
     private let foldCloseField = NSTextField(string: "")
     private let keywordViews: [NSTextView] = (0..<4).map { _ in NSTextView() }
     private let previewLabel = NSTextField(labelWithString: "")
+    /// Always visible, and repainted as the rules are typed.
+    private let livePreview = UDLPreviewView()
 
     public init(
         editing definition: LanguageDefinition? = nil,
@@ -124,7 +127,13 @@ public final class UDLEditorWindowController: NSWindowController {
         previewLabel.textColor = .secondaryLabelColor
         previewLabel.lineBreakMode = .byTruncatingTail
 
-        let preview = NSButton(title: "Test on Current Document", target: self, action: #selector(previewTapped))
+        let preview = NSButton(title: "Test on Current Document", target: self,
+                               action: #selector(previewTapped))
+        let previewHeading = NSTextField(labelWithString: "Live preview")
+        previewHeading.font = DS.Font.bodyEmphasis()
+        previewHeading.textColor = DS.Color.textPrimary
+        livePreview.translatesAutoresizingMaskIntoConstraints = false
+        livePreview.heightAnchor.constraint(equalToConstant: 120).isActive = true
         let importButton = NSButton(title: "Import…", target: self, action: #selector(importTapped))
         let exportButton = NSButton(title: "Export…", target: self, action: #selector(exportTapped))
         let save = NSButton(title: "Save", target: self, action: #selector(saveTapped))
@@ -138,6 +147,7 @@ public final class UDLEditorWindowController: NSWindowController {
 
         let root = NSStackView(views: [general, separator(), comments, separator(),
                                        delimiters, separator(), keywordStack,
+                                       previewHeading, livePreview,
                                        previewLabel, buttons])
         root.orientation = .vertical
         root.alignment = .leading
@@ -153,6 +163,7 @@ public final class UDLEditorWindowController: NSWindowController {
             keywordStack.widthAnchor.constraint(equalTo: root.widthAnchor),
         ])
         window.contentView = content
+        observeFields()
     }
 
     private func separator() -> NSView {
@@ -184,6 +195,22 @@ public final class UDLEditorWindowController: NSWindowController {
     }
 
     /// Reads the form back into a definition.
+    /// Watches every field, so the preview follows the rules as they are typed
+    /// rather than waiting for a button.
+    private func observeFields() {
+        let fields: [NSTextField] = [nameField, extensionsField, lineCommentField,
+                                     blockOpenField, blockCloseField, delimitersField,
+                                     escapeField, operatorsField, foldOpenField, foldCloseField]
+        for field in fields { field.delegate = self }
+        for view in keywordViews { view.delegate = self }
+        refreshPreview()
+    }
+
+    /// Repaints the preview from the rules as they stand.
+    func refreshPreview() {
+        livePreview.update(with: currentDefinition())
+    }
+
     public func currentDefinition() -> LanguageDefinition {
         func tokens(_ field: NSTextField) -> [String] {
             field.stringValue.split(separator: " ").map(String.init).filter { !$0.isEmpty }
@@ -293,4 +320,14 @@ public final class UDLEditorWindowController: NSWindowController {
     }
 
     @objc private func closeTapped() { window?.close() }
+}
+
+extension UDLEditorWindowController: NSTextFieldDelegate, NSTextViewDelegate {
+    public func controlTextDidChange(_ obj: Notification) {
+        refreshPreview()
+    }
+
+    public func textDidChange(_ notification: Notification) {
+        refreshPreview()
+    }
 }
