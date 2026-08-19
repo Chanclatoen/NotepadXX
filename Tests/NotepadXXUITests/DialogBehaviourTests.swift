@@ -166,3 +166,68 @@ final class DocumentPromptsAreSheetsTests: XCTestCase {
         expectSheet(controller, "Save Session As")
     }
 }
+
+/// The shortcut field captures the key event itself, so a recorded shortcut is
+/// one the keyboard can actually produce.
+@MainActor
+final class ShortcutRecorderTests: XCTestCase {
+    private func keyEvent(_ characters: String, _ modifiers: NSEvent.ModifierFlags,
+                          keyCode: UInt16 = 0) -> NSEvent {
+        NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers,
+                         timestamp: 0, windowNumber: 0, context: nil,
+                         characters: characters, charactersIgnoringModifiers: characters,
+                         isARepeat: false, keyCode: keyCode)!
+    }
+
+    func testItCapturesTheKeyAndItsModifiers() {
+        let field = ShortcutRecorderField(binding: nil)
+        var captured: KeyBinding?
+        field.onCapture = { captured = $0 }
+
+        field.keyDown(with: keyEvent("d", [.command, .shift]))
+        XCTAssertEqual(captured?.key, "d")
+        XCTAssertEqual(captured?.displayString, "⇧⌘D")
+    }
+
+    /// A modifier on its own is not a shortcut.
+    func testHoldingAModifierDoesNotCommit() {
+        let field = ShortcutRecorderField(binding: nil)
+        var captures = 0
+        field.onCapture = { _ in captures += 1 }
+
+        let flags = NSEvent.keyEvent(with: .flagsChanged, location: .zero,
+                                     modifierFlags: [.command], timestamp: 0, windowNumber: 0,
+                                     context: nil, characters: "", charactersIgnoringModifiers: "",
+                                     isARepeat: false, keyCode: 55)!
+        field.flagsChanged(with: flags)
+        XCTAssertEqual(captures, 0)
+        XCTAssertNil(field.binding)
+    }
+
+    func testDeleteClearsTheShortcut() {
+        let field = ShortcutRecorderField(binding: KeyBinding(key: "d", modifiers: 1 << 20))
+        var captured: KeyBinding? = KeyBinding(key: "x", modifiers: 0)
+        var cleared = false
+        field.onCapture = { binding in
+            captured = binding
+            cleared = binding == nil
+        }
+
+        field.keyDown(with: keyEvent("", [], keyCode: 51))
+        XCTAssertTrue(cleared)
+        XCTAssertNil(captured)
+        XCTAssertNil(field.binding)
+    }
+
+    func testEscapeCancelsWithoutRecording() {
+        let field = ShortcutRecorderField(binding: nil)
+        var cancelled = false
+        var captures = 0
+        field.onCancel = { cancelled = true }
+        field.onCapture = { _ in captures += 1 }
+
+        field.keyDown(with: keyEvent("", [], keyCode: 53))
+        XCTAssertTrue(cancelled)
+        XCTAssertEqual(captures, 0)
+    }
+}

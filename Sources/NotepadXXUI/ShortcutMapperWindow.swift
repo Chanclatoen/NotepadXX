@@ -155,44 +155,36 @@ public final class ShortcutMapperWindowController: NSWindowController {
     }
 
     @objc private func editSelected() {
-        guard rows.indices.contains(tableView.selectedRow) else { return }
+        guard rows.indices.contains(tableView.selectedRow), let window else { return }
         let command = rows[tableView.selectedRow]
 
         let alert = NSAlert()
         alert.messageText = "Shortcut for “\(command.title)”"
-        alert.informativeText = "Type the key, then choose the modifiers."
-        let keyField = NSTextField(string: command.binding?.key ?? "")
-        let commandBox = NSButton(checkboxWithTitle: "⌘", target: nil, action: nil)
-        let shiftBox = NSButton(checkboxWithTitle: "⇧", target: nil, action: nil)
-        let optionBox = NSButton(checkboxWithTitle: "⌥", target: nil, action: nil)
-        let controlBox = NSButton(checkboxWithTitle: "⌃", target: nil, action: nil)
+        alert.informativeText = "Hold the modifiers and press a key. Esc cancels, ⌫ removes the shortcut."
 
-        let existing = command.binding?.modifiers ?? 0
-        commandBox.state = existing & (1 << 20) != 0 ? .on : .off
-        shiftBox.state = existing & (1 << 17) != 0 ? .on : .off
-        optionBox.state = existing & (1 << 19) != 0 ? .on : .off
-        controlBox.state = existing & (1 << 18) != 0 ? .on : .off
-
-        let stack = NSStackView(views: [keyField, commandBox, shiftBox, optionBox, controlBox])
-        stack.orientation = .horizontal
-        stack.spacing = 8
-        stack.frame = NSRect(x: 0, y: 0, width: 340, height: 26)
-        keyField.widthAnchor.constraint(equalToConstant: 60).isActive = true
-        alert.accessoryView = stack
+        let recorder = ShortcutRecorderField(binding: command.binding)
+        alert.accessoryView = recorder
         alert.addButton(withTitle: "Assign")
         alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = recorder
 
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        let key = keyField.stringValue.trimmingCharacters(in: .whitespaces)
-        guard !key.isEmpty else { return }
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            self.apply(recorder.binding, to: command)
+        }
+    }
 
-        var modifiers: UInt = 0
-        if commandBox.state == .on { modifiers |= (1 << 20) }
-        if shiftBox.state == .on { modifiers |= (1 << 17) }
-        if optionBox.state == .on { modifiers |= (1 << 19) }
-        if controlBox.state == .on { modifiers |= (1 << 18) }
+    /// Applies a recorded binding, refusing or confirming as its conflict
+    /// severity requires.
+    private func apply(_ binding: KeyBinding?, to command: ShortcutCommand) {
+        guard let binding else {
+            // ⌫ cleared it: the command keeps its menu item, without a key.
+            try? map.assign(nil, to: command.id)
+            onChange()
+            reload()
+            return
+        }
 
-        let binding = KeyBinding(key: key, modifiers: modifiers)
         if let conflict = map.conflict(for: binding, assigningTo: command.id) {
             switch conflict.severity {
             case .reserved:
@@ -201,7 +193,7 @@ public final class ShortcutMapperWindowController: NSWindowController {
                 refusal.messageText = "\(binding.displayString) belongs to macOS"
                 refusal.informativeText = conflict.explanation
                 refusal.addButton(withTitle: "OK")
-                refusal.runModal()
+                window.map { refusal.beginSheetModal(for: $0) { _ in } }
                 return
             case .hard:
                 let choice = NSAlert()
@@ -209,11 +201,17 @@ public final class ShortcutMapperWindowController: NSWindowController {
                 choice.informativeText = conflict.explanation
                 choice.addButton(withTitle: "Reassign")
                 choice.addButton(withTitle: "Cancel")
-                guard choice.runModal() == .alertFirstButtonReturn else { return }
-                try? map.assign(binding, to: command.id, force: true)
+                window.map { host in
+                    choice.beginSheetModal(for: host) { [weak self] response in
+                        guard response == .alertFirstButtonReturn, let self else { return }
+                        try? self.map.assign(binding, to: command.id, force: true)
+                        self.onChange()
+                        self.reload()
+                    }
+                }
+                return
             case .soft:
                 // Both commands keep the key; scope decides which one fires.
-                // Forcing here would unbind the menu command instead.
                 try? map.assign(binding, to: command.id, allowingShadow: true)
             }
         } else {
@@ -222,6 +220,7 @@ public final class ShortcutMapperWindowController: NSWindowController {
         onChange()
         reload()
     }
+
 }
 
 extension ShortcutMapperWindowController: NSTableViewDataSource, NSTableViewDelegate {
