@@ -241,6 +241,22 @@ extension MainWindowController {
         var needsPrompt: [TextDocument] = []
         for tab in tabs {
             let document = tab.document
+
+            // A file that has gone is remembered, not closed: it may come back
+            // — a branch switch or a rebuild often removes and restores one —
+            // and the text is still in front of the user either way.
+            if document.isMissingFromDisk() {
+                if !missingDocumentIDs.contains(document.id) {
+                    missingDocumentIDs.insert(document.id)
+                    document.isDirty ? () : markDocumentUnsaved(document)
+                }
+                continue
+            }
+            if missingDocumentIDs.remove(document.id) != nil {
+                reattach(document)
+                continue
+            }
+
             guard document.hasChangedOnDisk(), let url = document.fileURL else { continue }
 
             // An unsaved edit must never be discarded without asking, whatever
@@ -257,6 +273,26 @@ extension MainWindowController {
 
         // Each prompt is a sheet on this window, asked one at a time.
         promptForExternalChanges(needsPrompt)
+        refreshUI()
+    }
+
+    /// The document's file has come back. Reload it when nothing would be
+    /// lost; leave unsaved edits alone and just note that it is attached again.
+    private func reattach(_ document: TextDocument) {
+        guard let url = document.fileURL else { return }
+        guard !document.isDirty, let reloaded = try? TextDocument.load(contentsOf: url) else {
+            refreshUI()
+            return
+        }
+        document.adoptContents(of: reloaded)
+        for editor in editorControllers(for: document) { editor.load(text: document.text) }
+        refreshUI()
+    }
+
+    /// A document whose file has gone keeps its text, and is marked unsaved so
+    /// the tab shows there is something to write back.
+    private func markDocumentUnsaved(_ document: TextDocument) {
+        document.text += ""
         refreshUI()
     }
 

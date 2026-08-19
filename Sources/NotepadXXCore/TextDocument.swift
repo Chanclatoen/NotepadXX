@@ -102,6 +102,15 @@ public final class TextDocument: Identifiable, @unchecked Sendable {
         lastKnownModification = attributes?[.modificationDate] as? Date
     }
 
+    /// True when the document's file has gone from disk.
+    ///
+    /// Deleting a file underneath an open document does not close it: the text
+    /// is still in front of the user, and it can be saved back.
+    public func isMissingFromDisk() -> Bool {
+        guard let url = fileURL else { return false }
+        return !FileManager.default.fileExists(atPath: url.path)
+    }
+
     /// True when the file changed on disk since we last read or wrote it —
     /// drives Notepad++'s file-status auto-detection (reload/prompt).
     public func hasChangedOnDisk() -> Bool {

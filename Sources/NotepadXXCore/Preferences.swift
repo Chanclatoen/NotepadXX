@@ -43,6 +43,10 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var replaceTabsBySpaces: Bool = false
     public var autoIndent: Bool = true
     public var trimTrailingWhitespaceOnPaste: Bool = false
+    public var reindentOnPaste: Bool = false
+    /// Per-language indentation, keyed by language name. An entry wins over the
+    /// defaults above, which is the point of having it.
+    public var indentOverrides: [String: IndentOverride] = [:]
 
     // MARK: - New document defaults
     public var defaultEncodingRawValue: UInt = String.Encoding.utf8.rawValue
@@ -88,6 +92,25 @@ public struct Preferences: Codable, Equatable, Sendable {
     /// window chrome are never light and dark at the same time.
     public var themeName: String = "System"
 
+    /// Indentation for one language.
+    public struct IndentOverride: Codable, Equatable, Sendable {
+        public var width: Int
+        public var usesSpaces: Bool
+
+        public init(width: Int, usesSpaces: Bool) {
+            self.width = width
+            self.usesSpaces = usesSpaces
+        }
+    }
+
+    /// The indentation to use for a language: its override, or the default.
+    public func indentation(forLanguage language: String?) -> (width: Int, usesSpaces: Bool) {
+        if let language, let override = indentOverrides[language] {
+            return (override.width, override.usesSpaces)
+        }
+        return (tabWidth, replaceTabsBySpaces)
+    }
+
     public init() {}
 
     /// Clamps values that would break the editor if a hand-edited file supplied
@@ -101,6 +124,9 @@ public struct Preferences: Codable, Equatable, Sendable {
         caretWidth = min(max(1, caretWidth), 5)
         caretScrollMargin = min(max(0, caretScrollMargin), 40)
         readOnlyAboveMegabytes = min(max(0, readOnlyAboveMegabytes), 4096)
+        indentOverrides = indentOverrides.mapValues {
+            IndentOverride(width: min(max(1, $0.width), 16), usesSpaces: $0.usesSpaces)
+        }
         edgeColumn = max(0, edgeColumn)
     }
 }

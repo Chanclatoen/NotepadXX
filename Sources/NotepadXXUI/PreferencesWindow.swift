@@ -28,6 +28,9 @@ public final class PreferencesWindowController: NSWindowController {
         case choice(String, WritableKeyPath<Preferences, String>, options: [String])
         /// A text encoding, stored as `String.Encoding`'s raw value.
         case encoding(String, WritableKeyPath<Preferences, UInt>)
+        /// A button that opens a sheet. The design keeps long lists behind one
+        /// rather than growing the page.
+        case sheet(String, button: String, note: String)
 
         /// Every preference this control writes. Two controls writing the same
         /// key would mean one of them silently disagrees with the other.
@@ -41,6 +44,7 @@ public final class PreferencesWindowController: NSWindowController {
             case .optionalText(_, let keyPath): return [keyPath]
             case .choice(_, let keyPath, _): return [keyPath]
             case .encoding(_, let keyPath): return [keyPath]
+            case .sheet: return []
             }
         }
 
@@ -53,6 +57,7 @@ public final class PreferencesWindowController: NSWindowController {
             case .number(let label, _, _), .decimal(let label, _, _): return label
             case .choice(let label, _, _): return label
             case .encoding(let label, _): return label
+            case .sheet(let label, _, _): return label
             }
         }
     }
@@ -102,6 +107,7 @@ public final class PreferencesWindowController: NSWindowController {
     private var pages: [Page] = []
     private var trampolines: [ActionTrampoline] = []
     private var keyMonitor: Any?
+    private var overridesSheet: LanguageOverridesSheetController?
 
     /// Non-empty while the search field filters the list.
     private var query = "" { didSet { applyQuery() } }
@@ -222,6 +228,13 @@ public final class PreferencesWindowController: NSWindowController {
                     ]),
                     Group("Automatic", [
                         .toggles("On new lines", [("Match the previous line's indentation", \.autoIndent)]),
+                        .toggles("On paste", [("Re-indent pasted text to the surrounding block",
+                                               \.reindentOnPaste)]),
+                    ]),
+                    Group("Per language", [
+                        .sheet("Overrides", button: "Language Overrides…",
+                               note: "An override wins over the default above and travels with "
+                                   + "exported settings."),
                     ]),
                  ], showsPreview: true),
 
@@ -604,6 +617,20 @@ public final class PreferencesWindowController: NSWindowController {
 
     @objc private func resetPageTapped() { resetCurrentPage() }
 
+    /// Opens the sheet a `.sheet` control stands for.
+    @objc private func openSheet(_ sender: NSButton) {
+        guard let window else { return }
+        let languages = LanguageRegistry.shared.all.map(\.name)
+        let sheet = LanguageOverridesSheetController(
+            store: store, languages: languages) { [weak self] in
+            guard let self else { return }
+            self.onChange(self.store.preferences)
+        }
+        overridesSheet = sheet
+        guard let sheetWindow = sheet.window else { return }
+        window.beginSheet(sheetWindow) { [weak self] _ in self?.overridesSheet = nil }
+    }
+
     /// Resets the settings on the page being shown, and applies immediately.
     public func resetCurrentPage() {
         guard pages.indices.contains(selectedPageIndex) else { return }
@@ -656,6 +683,7 @@ public final class PreferencesWindowController: NSWindowController {
         case .optionalText(_, let keyPath): target[keyPath: keyPath] = source[keyPath: keyPath]
         case .choice(_, let keyPath, _): target[keyPath: keyPath] = source[keyPath: keyPath]
         case .encoding(_, let keyPath): target[keyPath: keyPath] = source[keyPath: keyPath]
+        case .sheet: break
         case .toggles(_, let options):
             for (_, keyPath) in options { target[keyPath: keyPath] = source[keyPath: keyPath] }
         }
@@ -741,6 +769,21 @@ public final class PreferencesWindowController: NSWindowController {
                 self?.commit()
             }
             return field
+
+        case .sheet(_, let buttonTitle, let note):
+            let button = NSButton(title: buttonTitle, target: self, action: #selector(openSheet(_:)))
+            button.bezelStyle = .rounded
+            let caption = NSTextField(labelWithString: note)
+            caption.font = DS.Font.small()
+            caption.textColor = DS.Color.textTertiary
+            caption.lineBreakMode = .byWordWrapping
+            caption.maximumNumberOfLines = 2
+            caption.preferredMaxLayoutWidth = 320
+            let stack = NSStackView(views: [button, caption])
+            stack.orientation = .vertical
+            stack.alignment = .leading
+            stack.spacing = DS.Space.xs
+            return stack
 
         case .encoding(let label, let keyPath):
             let popup = NSPopUpButton()

@@ -65,8 +65,13 @@ extension MainWindowController {
             editor.caretScrollMargin = preferences.caretScrollMargin
             editor.copiesWholeLineWhenEmpty = preferences.copyWholeLineWhenNothingSelected
             editor.trimsTrailingWhitespaceOnPaste = preferences.trimTrailingWhitespaceOnPaste
-            editor.indentUsesSpaces = preferences.replaceTabsBySpaces
-            editor.indentWidth = preferences.tabWidth
+            // Per-language overrides win over the defaults, which is what
+            // makes them worth having.
+            let language = documents.first { editorControllers(for: $0).contains(editor) }?.languageName
+            let indentation = preferences.indentation(forLanguage: language)
+            editor.indentUsesSpaces = indentation.usesSpaces
+            editor.indentWidth = indentation.width
+            editor.reindentsOnPaste = preferences.reindentOnPaste
             editor.gutterView?.needsDisplay = true
             editor.applyTheme(resolvedTheme(named: preferences.themeName))
         }

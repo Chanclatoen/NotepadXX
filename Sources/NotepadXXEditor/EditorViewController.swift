@@ -76,7 +76,9 @@ public final class EditorViewController: NSViewController {
     public var clickableURLs = true
     public var autoIndentEnabled = true
     public var indentUsesSpaces = false
-    public var indentWidth = 4
+    public var indentWidth = 4 {
+        didSet { (textView as? NotepadTextView)?.indentWidth = indentWidth }
+    }
     /// Guards the auto-indent insertion from re-entering the change handler.
     private var isAutoIndenting = false
     /// Vertical guides at each indent level.
@@ -109,6 +111,10 @@ public final class EditorViewController: NSViewController {
         didSet {
             (textView as? NotepadTextView)?.trimsTrailingWhitespaceOnPaste = trimsTrailingWhitespaceOnPaste
         }
+    }
+    /// Re-indents pasted text to the block it lands in.
+    public var reindentsOnPaste = false {
+        didSet { (textView as? NotepadTextView)?.reindentsOnPaste = reindentsOnPaste }
     }
 
     /// Closes brackets and quotes as they are typed.

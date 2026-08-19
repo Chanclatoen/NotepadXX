@@ -39,6 +39,8 @@ public final class MainWindowController: NSWindowController {
     var installedGoToPanel: GoToPanelController?
     /// The running Find in Files scan, if there is one.
     var activeFileSearch: SearchCancellationToken?
+    /// Documents whose file has gone from disk, so its return can be noticed.
+    var missingDocumentIDs: Set<UUID> = []
     var documentSwitcherMonitor: Any?
     var installedRunPanel: RunPanelController?
     var installedRunMacroPanel: RunMacroPanelController?

@@ -10,6 +10,10 @@ final class NotepadTextView: TextView {
     var copiesWholeLineWhenEmpty = true
     /// Strip trailing whitespace from pasted text.
     var trimsTrailingWhitespaceOnPaste = false
+    /// Re-indent pasted text to the block it lands in.
+    var reindentsOnPaste = false
+    /// Columns a tab stands for, for re-indenting.
+    var indentWidth = 4
 
     override func copy(_ sender: AnyObject) {
         guard copiesWholeLineWhenEmpty, hasEmptySelection else {
@@ -35,13 +39,28 @@ final class NotepadTextView: TextView {
     }
 
     override func paste(_ sender: AnyObject) {
-        guard trimsTrailingWhitespaceOnPaste,
+        guard trimsTrailingWhitespaceOnPaste || reindentsOnPaste,
               let pasted = NSPasteboard.general.string(forType: .string) else {
             super.paste(sender)
             return
         }
-        insertText(ClipboardBehaviour.trimmingTrailingWhitespace(pasted),
-                   replacementRange: NSRange(location: NSNotFound, length: 0))
+        var text = pasted
+        if trimsTrailingWhitespaceOnPaste {
+            text = ClipboardBehaviour.trimmingTrailingWhitespace(text)
+        }
+        if reindentsOnPaste {
+            text = ClipboardBehaviour.reindented(text, toMatch: indentAtCaret, tabWidth: indentWidth)
+        }
+        insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+    }
+
+    /// The indentation of the line the caret is on, which is what pasted text
+    /// is lined up with.
+    private var indentAtCaret: String {
+        let content = string as NSString
+        let caret = min(selectedRangeForClipboard.location, content.length)
+        let line = content.substring(with: content.lineRange(for: NSRange(location: caret, length: 0)))
+        return String(line.prefix { $0 == " " || $0 == "\t" })
     }
 
     private var hasEmptySelection: Bool {
