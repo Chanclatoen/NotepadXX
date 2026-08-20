@@ -22,8 +22,8 @@ a documented OS-level reason to differ.
 
 ## Download
 
-[**NotepadXX 0.1.0**](https://github.com/Chanclatoen/NotepadXX/releases/latest)
-— macOS 14+, Apple Silicon.
+[**NotepadXX**](https://github.com/Chanclatoen/NotepadXX/releases/latest)
+— macOS 14+, Apple Silicon and Intel.
 
 The build is signed with a Developer ID but not yet notarized, so macOS refuses
 it on first launch: right-click the app and choose **Open**, or run

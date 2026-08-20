@@ -7,8 +7,28 @@ cd "$(dirname "$0")/.."
 CONFIG=${CONFIG:-release}
 APP="dist/NotepadXX.app"
 
-swift build -c "$CONFIG"
-BIN=$(swift build -c "$CONFIG" --show-bin-path)/NotepadXX
+# A universal build is opt-in because the second slice is a full cross-compile
+# and takes minutes; day-to-day builds do not need it, releases do.
+#
+# The two slices are built separately and joined with lipo rather than passing
+# --arch twice: multiple architectures route SwiftPM through the Xcode build
+# system, which cannot resolve the SwiftLint build-tool plugin this package
+# pulls in ("Missing package product 'SwiftLint@11'").
+if [[ "${UNIVERSAL:-0}" == "1" ]]; then
+  echo "==> building arm64"
+  swift build -c "$CONFIG" --triple arm64-apple-macosx14.0
+  echo "==> building x86_64 (cross-compile, slow)"
+  swift build -c "$CONFIG" --triple x86_64-apple-macosx14.0
+
+  ARM=$(swift build -c "$CONFIG" --triple arm64-apple-macosx14.0 --show-bin-path)/NotepadXX
+  INTEL=$(swift build -c "$CONFIG" --triple x86_64-apple-macosx14.0 --show-bin-path)/NotepadXX
+  BIN="$(mktemp -d)/NotepadXX"
+  lipo -create -output "$BIN" "$ARM" "$INTEL"
+  echo "==> universal: $(lipo -archs "$BIN")"
+else
+  swift build -c "$CONFIG"
+  BIN=$(swift build -c "$CONFIG" --show-bin-path)/NotepadXX
+fi
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -34,8 +54,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundleIconName</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.1.0</string>
-    <key>CFBundleVersion</key><string>1</string>
+    <key>CFBundleShortVersionString</key><string>0.1.1</string>
+    <key>CFBundleVersion</key><string>2</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSPrincipalClass</key><string>NSApplication</string>

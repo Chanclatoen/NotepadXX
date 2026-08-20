@@ -29,8 +29,16 @@ if [[ -z "$DEVELOPER_ID" ]]; then
 fi
 echo "==> identity: $DEVELOPER_ID"
 
-echo "==> build"
-CONFIG=release ./scripts/make-app.sh
+echo "==> build (universal)"
+# Both architectures: a release that only runs on Apple Silicon leaves every
+# Intel Mac unable to open it at all.
+CONFIG=release UNIVERSAL=1 ./scripts/make-app.sh
+
+ARCHS=$(lipo -archs "$APP/Contents/MacOS/NotepadXX")
+case "$ARCHS" in
+  *x86_64*arm64*|*arm64*x86_64*) echo "==> architectures: $ARCHS" ;;
+  *) echo "error: release build is not universal (got: $ARCHS)" >&2; exit 1 ;;
+esac
 
 echo "==> sign ($VERSION)"
 # Nested code must be signed before the enclosing bundle.
