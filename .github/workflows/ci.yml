@@ -3,7 +3,15 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore: ["**/*.md", "docs/**", "LICENSE"]
   pull_request:
+    paths-ignore: ["**/*.md", "docs/**", "LICENSE"]
+
+# A newer push makes an older run pointless. Cancelling it matters here because
+# macOS runners bill at ten times the Linux rate.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -28,6 +36,30 @@ jobs:
 
       - name: Build app bundle
         run: ./scripts/make-app.sh
+
+      - name: Check the signature and the runtime it asks for
+        # A build that quietly loses the hardened runtime, or gains an
+        # entitlement that weakens it, should fail here rather than at
+        # notarization — or worse, not at all.
+        run: |
+          set -euo pipefail
+          APP=dist/NotepadXX.app
+          codesign --verify --strict --verbose=2 "$APP"
+
+          entitlements=$(codesign -d --entitlements - --xml "$APP" 2>/dev/null || true)
+          for risky in \
+            com.apple.security.cs.allow-unsigned-executable-memory \
+            com.apple.security.cs.disable-library-validation \
+            com.apple.security.cs.allow-dyld-environment-variables \
+            com.apple.security.automation.apple-events; do
+            if printf '%s' "$entitlements" | grep -q "$risky"; then
+              if printf '%s' "$entitlements" | grep -A1 "$risky" | grep -q "<true/>"; then
+                echo "::error::$risky is enabled, which weakens the hardened runtime"
+                exit 1
+              fi
+            fi
+          done
+          echo "signature valid, no risk-raising entitlements enabled"
 
       - name: Verify the app launches and renders
         run: |

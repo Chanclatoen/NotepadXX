@@ -12,6 +12,12 @@ on:
 permissions:
   contents: read
 
+# Semgrep and gitleaks run on Linux, so these are the cheap jobs; the app
+# hardening check lives in CI, where the app is already built.
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   semgrep:
     name: Semgrep
@@ -58,34 +64,3 @@ jobs:
           sudo mv gitleaks /usr/local/bin/
       - name: Scan history
         run: gitleaks detect --source . --redact --no-banner --exit-code 1
-
-  bundle:
-    name: App hardening
-    runs-on: macos-26
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Build
-        run: ./scripts/make-app.sh
-      - name: Check the signature and the runtime it asks for
-        # A build that quietly loses the hardened runtime, or gains an
-        # entitlement that weakens it, should fail here rather than at
-        # notarization — or worse, not at all.
-        run: |
-          set -euo pipefail
-          APP=dist/NotepadXX.app
-          codesign --verify --strict --verbose=2 "$APP"
-
-          entitlements=$(codesign -d --entitlements - --xml "$APP" 2>/dev/null || true)
-          for risky in \
-            com.apple.security.cs.allow-unsigned-executable-memory \
-            com.apple.security.cs.disable-library-validation \
-            com.apple.security.cs.allow-dyld-environment-variables \
-            com.apple.security.automation.apple-events; do
-            if printf '%s' "$entitlements" | grep -q "$risky"; then
-              if printf '%s' "$entitlements" | grep -A1 "$risky" | grep -q "<true/>"; then
-                echo "::error::$risky is enabled, which weakens the hardened runtime"
-                exit 1
-              fi
-            fi
-          done
-          echo "signature valid, no risk-raising entitlements enabled"
