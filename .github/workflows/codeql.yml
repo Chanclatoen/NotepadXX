@@ -4,8 +4,11 @@ name: CodeQL
 # reaching a shell rather than merely matching a pattern.
 #
 # It is free for public repositories. On a private one it needs GitHub Advanced
-# Security, so until this repository is public the workflow will not run — it is
-# committed ready so that turning it on is a one-line change, not a rewrite.
+# Security, which this repository does not have: the analysis runs but the
+# upload fails with "code scanning is not enabled". Rather than leave a job
+# permanently red — which teaches everyone to ignore red — the job is skipped
+# while the repository is private, and starts working by itself the moment it
+# is made public.
 on:
   push:
     branches: [main]
@@ -20,13 +23,16 @@ permissions:
 jobs:
   analyze:
     name: Analyze Swift
+    # Uploading results needs code scanning, which a private repository without
+    # Advanced Security cannot enable.
+    if: github.event.repository.visibility == 'public'
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v5
-      - uses: github/codeql-action/init@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
         with:
           languages: swift
           queries: security-extended
       - name: Build
         run: swift build
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
