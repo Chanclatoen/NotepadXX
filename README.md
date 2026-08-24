@@ -106,6 +106,20 @@ Requires macOS 14+ and Swift 6.
 ./scripts/release.sh    # signs and packages dist/NotepadXX.dmg
 ```
 
+CI runs on a self-hosted runner — this repository's own Mac — rather than
+GitHub-hosted machines, which are billed. Nothing runs in the background: start
+the runner when you want the queued jobs picked up.
+
+```sh
+./scripts/ci-local.sh           # take one queued job, then exit
+./scripts/ci-local.sh --watch   # keep taking jobs until Ctrl-C
+```
+
+Pushing without starting it is fine: the jobs queue until the runner appears,
+and the pre-push hook has already built and tested locally. Pull requests from
+forks are refused on the self-hosted runner, because a fork's code would
+otherwise execute on that machine.
+
 `check.sh` is what CI runs. `release.sh` signs with a Developer ID from the
 keychain and stops before notarization unless notary credentials are set, so a
 build is never described as more blessed than it is.

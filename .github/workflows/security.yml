@@ -21,11 +21,21 @@ concurrency:
 jobs:
   semgrep:
     name: Semgrep
-    runs-on: ubuntu-latest
-    container:
-      image: semgrep/semgrep
+    runs-on: [self-hosted, macOS, notepadxx]
+    # A fork's pull request must never execute on a self-hosted runner: the job
+    # runs as this user, on this machine. Harmless while the repository is
+    # private, fatal the day it is public.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check the tool is present
+        # Installed on the runner rather than pulled per run: a self-hosted Mac
+        # has no container to fetch, and this keeps the job offline-capable.
+        run: |
+          command -v semgrep >/dev/null || {
+            echo "::error::semgrep is not installed on this runner (brew install semgrep)"
+            exit 1
+          }
       - name: Scan
         # The custom rules in .semgrep.yml target this app's own hazards — the
         # Run menu's shell invocation, the plug-in bridge and the plug-in
@@ -42,25 +52,19 @@ jobs:
 
   gitleaks:
     name: Secret scan
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, notepadxx]
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # gitleaks reads history, so a secret committed and later removed is
           # still found — which is the point, since it stays in every clone.
           fetch-depth: 0
-      - name: Install gitleaks
-        # Pinned by checksum. A scanner fetched without verification is a
-        # supply-chain hole in the thing meant to find supply-chain holes.
-        env:
-          GITLEAKS_VERSION: 8.30.1
-          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+      - name: Check the tool is present
         run: |
-          set -euo pipefail
-          curl -sSL -o gitleaks.tar.gz \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
-          tar -xzf gitleaks.tar.gz gitleaks
-          sudo mv gitleaks /usr/local/bin/
+          command -v gitleaks >/dev/null || {
+            echo "::error::gitleaks is not installed on this runner (brew install gitleaks)"
+            exit 1
+          }
       - name: Scan history
         run: gitleaks detect --source . --redact --no-banner --exit-code 1

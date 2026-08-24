@@ -19,7 +19,11 @@ jobs:
     # build-tool plugin (pulled in transitively by CodeEditTextView) to a
     # source build, and SwiftPM refuses: "a prebuild command cannot use
     # executables built from source".
-    runs-on: macos-26
+    # Self-hosted: this repository's runner is a Mac started on demand with
+    # scripts/ci-local.sh. Switch back to `macos-26` for GitHub-hosted.
+    runs-on: [self-hosted, macOS, notepadxx]
+    # A fork's pull request must never execute on a self-hosted runner.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
