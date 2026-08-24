@@ -28,10 +28,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Select the newest Xcode
+        # DEVELOPER_DIR rather than `sudo xcode-select`: a self-hosted runner has
+        # no terminal to type a password into, and this selects the toolchain for
+        # the job only, without changing the machine for everything else.
         run: |
-          ls /Applications | grep -i '^Xcode' || true
           latest=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
-          if [ -n "$latest" ]; then sudo xcode-select -s "$latest"; fi
+          if [ -n "$latest" ]; then
+            echo "DEVELOPER_DIR=$latest/Contents/Developer" >> "$GITHUB_ENV"
+            export DEVELOPER_DIR="$latest/Contents/Developer"
+          fi
           xcodebuild -version
           swift --version
 
