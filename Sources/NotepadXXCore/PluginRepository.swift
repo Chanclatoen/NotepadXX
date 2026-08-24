@@ -9,8 +9,13 @@ public struct PluginListing: Codable, Equatable, Sendable, Identifiable {
     public var description: String
     public var author: String?
     public var homepage: String?
-    /// Where the plugin archive lives. A `file:` URL works, which is what makes
-    /// a local or bundled catalogue possible.
+    /// Where the plugin archive lives.
+    ///
+    /// May be absolute (`https://…`) or relative to the catalogue that listed
+    /// it (`plugins/thing.zip`). The bundled catalogue uses a relative path so
+    /// that it keeps working wherever the app is installed — an absolute path
+    /// written at build time names a directory that exists only on the machine
+    /// that built it.
     public var downloadURL: String
     /// Lowercase hex SHA-256 of the archive. Required: an unverified download
     /// is arbitrary code execution.
@@ -45,6 +50,20 @@ public struct PluginCatalogue: Codable, Equatable, Sendable {
     }
 }
 
+public extension PluginListing {
+    /// This listing with its download resolved against the catalogue's own
+    /// location, so a relative entry points at a real file.
+    func resolved(against catalogueURL: URL) -> PluginListing {
+        // An entry that already names a scheme is absolute and left alone.
+        if let parsed = URL(string: downloadURL), parsed.scheme != nil { return self }
+
+        var copy = self
+        let base = catalogueURL.deletingLastPathComponent()
+        copy.downloadURL = base.appendingPathComponent(downloadURL).absoluteString
+        return copy
+    }
+}
+
 /// Fetches plugin catalogues and installs from them — the Plugins Admin
 /// "Available" list.
 ///
@@ -68,6 +87,9 @@ public final class PluginRepository {
         case unreachable(String)
         case malformedCatalogue(String)
         case checksumMismatch(expected: String, actual: String)
+        /// The archive contained a link, which a plug-in has no use for and an
+        /// attacker does.
+        case unsafeArchiveEntry(String)
         /// A source or download that is not HTTPS.
         case insecureTransport(String)
         case notAnArchive(String)
@@ -114,7 +136,12 @@ public final class PluginRepository {
                 } else {
                     (data, _) = try await session.data(from: url)
                 }
-                loaded.append(try JSONDecoder().decode(PluginCatalogue.self, from: data))
+                var catalogue = try JSONDecoder().decode(PluginCatalogue.self, from: data)
+                // Entries may name their archive relative to the catalogue, and
+                // the bundled one does: an absolute path baked in at build time
+                // points at the build machine and exists nowhere else.
+                catalogue.plugins = catalogue.plugins.map { $0.resolved(against: url) }
+                loaded.append(catalogue)
             } catch is DecodingError {
                 failures.append(.malformedCatalogue(url.absoluteString))
             } catch let error as RepositoryError {
@@ -182,6 +209,7 @@ public final class PluginRepository {
         let archive = staging.appendingPathComponent("plugin.zip")
         try data.write(to: archive)
         try unzip(archive, into: staging)
+        try rejectLinks(in: staging)
 
         // The archive may hold the plugin at its root or one level down.
         guard let root = try locatePluginRoot(in: staging) else {
@@ -217,6 +245,26 @@ public final class PluginRepository {
         process.waitUntilExit()
         guard process.terminationStatus == 0 else {
             throw RepositoryError.notAnArchive(archive.lastPathComponent)
+        }
+    }
+
+    /// Refuses an unpacked archive that contains symbolic links.
+    ///
+    /// unzip declines to *write through* a link that escapes the destination,
+    /// but it will happily create the link itself. A plug-in is a small bundle
+    /// of scripts with no reason to contain one, and a link pointing outside
+    /// its own directory is a foothold for anything that later walks the tree.
+    private func rejectLinks(in directory: URL) throws {
+        let manager = FileManager.default
+        guard let walker = manager.enumerator(
+            at: directory, includingPropertiesForKeys: [.isSymbolicLinkKey]
+        ) else { return }
+
+        for case let entry as URL in walker {
+            let isLink = (try? entry.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) ?? false
+            if isLink {
+                throw RepositoryError.unsafeArchiveEntry(entry.lastPathComponent)
+            }
         }
     }
 

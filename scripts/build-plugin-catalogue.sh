@@ -30,11 +30,20 @@ print(m['name'].replace(' ', ' '), m['version'], m.get('description','').replac
   name=${name//$' '/ }
   desc=${desc//$' '/ }
 
-  url="file://$RESOURCES/plugins/$id.zip"
+  # Relative to the catalogue, never absolute: an absolute path written here
+  # names this build machine, and the app is installed somewhere else on every
+  # other Mac — which is exactly how the bundled plugins failed to install.
+  url="plugins/$id.zip"
   [ -n "$entries" ] && entries="$entries,"
   entries="$entries{\"identifier\":\"$id\",\"name\":\"$name\",\"version\":\"$version\",\"description\":\"$desc\",\"downloadURL\":\"$url\",\"sha256\":\"$sha\",\"author\":\"NotepadXX\"}"
 done
 
 printf '{"name":"NotepadXX Bundled Plugins","plugins":[%s]}\n' "$entries" \
   > "$RESOURCES/plugin-catalogue.json"
+# The bug this guards against shipped twice: absolute paths here name the
+# build machine and resolve nowhere else.
+if grep -q 'file://\|/Users/' "$RESOURCES/plugin-catalogue.json"; then
+  echo "error: the catalogue contains an absolute path, which will not exist on any other Mac" >&2
+  exit 1
+fi
 echo "catalogue: $(/usr/bin/python3 -c "import json;print(len(json.load(open('$RESOURCES/plugin-catalogue.json'))['plugins']))") plugins"

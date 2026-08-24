@@ -215,8 +215,16 @@ extension SearchResultsPanel: NSOutlineViewDataSource {
     }
 
     public func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any {
-        if item == nil { return results[index] }
-        return (item as! FileSearchResult).hits[index]
+        // Defensive rather than force-cast: this is called back by AppKit, and
+        // a reload racing a clear() would otherwise crash instead of drawing an
+        // empty row.
+        if item == nil {
+            return results.indices.contains(index) ? results[index] : FileSearchResult(url: URL(fileURLWithPath: "/"), hits: [])
+        }
+        guard let result = item as? FileSearchResult, result.hits.indices.contains(index) else {
+            return FileSearchResult(url: URL(fileURLWithPath: "/"), hits: [])
+        }
+        return result.hits[index]
     }
 
     public func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {

@@ -326,6 +326,10 @@ public final class PluginsAdminWindowController: NSWindowController {
         case .checksumMismatch:
             return "The download did not match the checksum in the catalogue, so it was discarded. "
                  + "The file may be corrupt or tampered with."
+        case .unsafeArchiveEntry(let entry):
+            return "The archive contains a link (\(entry)). Plug-ins are plain files, and a link "
+                 + "pointing outside the plug-in's own folder is a way out of it, so the install "
+                 + "was refused."
         case .insecureTransport(let source):
             return "\(source) is not served over HTTPS. Plug-ins are only fetched over an "
                  + "encrypted connection, because a catalogue that can be rewritten in transit "
