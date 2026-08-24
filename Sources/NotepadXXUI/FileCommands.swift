@@ -297,7 +297,13 @@ extension MainWindowController {
     }
 
     /// Reports a problem with the document, as a sheet on its window.
+    ///
+    /// The text is recorded before it is shown so a test can assert that a
+    /// failure actually reaches the user: with no window an alert falls back to
+    /// `runModal`, which would hang a test run rather than fail it.
     func presentError(_ message: String, detail: String?) {
+        lastReportedError = (message, detail)
+        guard MainWindowController.presentsAlerts else { return }
         let alert = NSAlert()
         alert.messageText = message
         if let detail { alert.informativeText = detail }

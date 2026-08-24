@@ -20,6 +20,16 @@ final class ClipboardBehaviourTests: XCTestCase {
         XCTAssertEqual(ClipboardBehaviour.trimmingTrailingWhitespace(pasted), "one\ntwo\nthree\n")
     }
 
+    /// Trimming must not damage characters that are more than one UTF-16 unit.
+    func testTrimmingPreservesAstralCharacters() {
+        let pasted = "  😀 café   \n\t🇳🇱 tail\t"
+        let trimmed = ClipboardBehaviour.trimmingTrailingWhitespace(pasted)
+        XCTAssertTrue(trimmed.contains("😀"), "an emoji was damaged: \(trimmed)")
+        XCTAssertTrue(trimmed.contains("🇳🇱"), "a flag was damaged: \(trimmed)")
+        XCTAssertTrue(trimmed.contains("café"))
+        XCTAssertFalse(trimmed.hasSuffix("\t"))
+    }
+
     func testTrimmingLeavesIndentationAlone() {
         let pasted = "    indented   \n\ttabbed\t"
         XCTAssertEqual(ClipboardBehaviour.trimmingTrailingWhitespace(pasted), "    indented\n\ttabbed")

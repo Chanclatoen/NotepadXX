@@ -6,7 +6,19 @@ import Foundation
 public final class TextDocument: Identifiable, @unchecked Sendable {
     public let id: UUID
     public private(set) var fileURL: URL?
-    public var text: String { didSet { if text != oldValue { isDirty = true } } }
+    /// The document's text.
+    ///
+    /// The dirty check is deliberately cheap. This is assigned on every
+    /// keystroke, and comparing two copies of a large document character by
+    /// character each time is enough to make typing in one unusable: once the
+    /// document is already dirty there is nothing to decide, and a differing
+    /// length settles it without looking at the contents.
+    public var text: String {
+        didSet {
+            guard !isDirty else { return }
+            if text.utf8.count != oldValue.utf8.count || text != oldValue { isDirty = true }
+        }
+    }
     public var encoding: FileEncoding
     public var lineEnding: LineEnding
     public private(set) var isDirty: Bool
@@ -80,10 +92,33 @@ public final class TextDocument: Identifiable, @unchecked Sendable {
         )
     }
 
-    public enum SaveError: Error, Equatable {
+    public enum SaveError: Error, Equatable, LocalizedError {
         case noDestination
         case unencodable(String)
         case unwritable(String)
+
+        public var errorDescription: String? {
+            switch self {
+            case .noDestination:
+                return "This document has no file to save to."
+            case .unencodable(let encoding):
+                return "The text contains characters that \(encoding) cannot represent."
+            case .unwritable(let reason):
+                return reason
+            }
+        }
+
+        /// What the user can do about it, which is the part an alert is for.
+        public var recoverySuggestion: String? {
+            switch self {
+            case .noDestination:
+                return "Use Save As to choose a location."
+            case .unencodable:
+                return "Choose UTF-8 under Encoding, then save again."
+            case .unwritable:
+                return "Check that the file is not read-only and that the disk has space."
+            }
+        }
     }
 
     /// Writes to `url` (or the document's own URL), re-applying `lineEnding`.

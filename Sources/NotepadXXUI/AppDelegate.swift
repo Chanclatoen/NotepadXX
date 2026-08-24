@@ -163,6 +163,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         windowController.showWindow(nil)
 
+        // --benchmark <file> measures the numbers quoted in the README.
+        if let path = options.benchmarkPath {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                Benchmark.run(path: path, controller: self.windowController)
+                NSApp.terminate(nil)
+            }
+            return
+        }
+
         // --screenshot <path> renders the window and exits, for CI and for
         // verifying the UI where screen capture is unavailable.
         if let path = options.screenshotPath {

@@ -8,8 +8,40 @@ import Foundation
 public struct Lexer {
     public let language: LanguageDefinition
 
+    /// Lookups derived from the language, built once.
+    ///
+    /// `LanguageDefinition` is Codable and mutable, so its `operatorCharacters`
+    /// is a computed property that builds a Set every time it is read — once
+    /// per character of the inner loop. And a case-insensitive `keywordGroup`
+    /// lowercases every keyword in the language for every word it is asked
+    /// about. Both are fine on a screenful and ruinous on a large file, so the
+    /// work is done here instead: the language a lexer holds cannot change.
+    private let operatorCharacters: Set<Character>
+    private let keywordGroups: [(TokenType, Set<String>)]
+    private let isCaseSensitive: Bool
+
     public init(language: LanguageDefinition) {
         self.language = language
+        self.operatorCharacters = language.operatorCharacters
+        self.isCaseSensitive = language.isCaseSensitive
+        // Case-insensitive languages get their keywords folded once, so a
+        // lookup is a hash probe rather than a scan of the whole list.
+        func fold(_ set: Set<String>) -> Set<String> {
+            language.isCaseSensitive ? set : Set(set.map { $0.lowercased() })
+        }
+        self.keywordGroups = [
+            (.keyword1, fold(language.keywords1)),
+            (.keyword2, fold(language.keywords2)),
+            (.keyword3, fold(language.keywords3)),
+            (.keyword4, fold(language.keywords4)),
+        ]
+    }
+
+    /// Which keyword group `word` belongs to, using the folded tables.
+    private func group(for word: String) -> TokenType? {
+        let probe = isCaseSensitive ? word : word.lowercased()
+        for (type, set) in keywordGroups where set.contains(probe) { return type }
+        return nil
     }
 
     /// State carried across a line boundary, so a range can be re-lexed without
@@ -132,12 +164,12 @@ public struct Lexer {
                 let start = index
                 while index < scalars.count && isIdentifierCharacter(scalars[index]) { index += 1 }
                 let word = String(scalars[start..<index])
-                if let group = language.keywordGroup(for: word) { emit(group, start, index) }
+                if let matched = group(for: word) { emit(matched, start, index) }
                 continue
             }
 
             // Operator.
-            if language.operatorCharacters.contains(character) {
+            if operatorCharacters.contains(character) {
                 emit(.operatorToken, index, index + 1)
                 index += 1
                 continue

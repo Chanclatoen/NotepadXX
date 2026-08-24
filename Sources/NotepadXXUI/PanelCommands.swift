@@ -23,6 +23,10 @@ extension MainWindowController {
         }
 
         let clipboard = ClipboardHistoryPanel()
+        // Held so the poll can be stopped when the window goes: a repeating
+        // timer is retained by the run loop, so it would otherwise keep waking
+        // the process every 0.75s for the rest of the session.
+        clipboardHistoryPanel = clipboard
         clipboard.onPaste = { [weak self] text in
             self?.currentEditor?.replaceSelection(with: text)
         }

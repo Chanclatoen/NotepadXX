@@ -82,19 +82,28 @@ implementation. See `docs/ROADMAP.md` for the remaining detail.
 
 ## Performance
 
-Measured on an M4 MacBook Pro, release build:
+Reproduce these rather than trust them:
 
-| file | result |
+```sh
+swift build -c release
+./.build/release/NotepadXX --benchmark /path/to/large-file --no-session
+```
+
+Measured on an Apple M4, release build, on a 100 MB log of 1,120,754 lines:
+
+| operation | result |
 |---|---|
-| 100 MB log, 926,660 lines | opens in **401 ms** |
-| edit (insert at start) | 1.0 ms |
-| scroll to bottom | 4.9 ms |
-| peak memory | 625 MB |
+| open (read 1,730 ms + build the view 684 ms) | **2.4 s** |
+| edit (insert at the start) | 395 ms |
+| scroll to the bottom | 307 ms |
+| resident memory | 875 MB |
 
-For comparison, CotEditor beachballs on a 120MB file (their issue #1924).
+A 60 MB C source file, which has block comments and so cannot skip the lexer
+state scan, opens in 1.6 s and scrolls to the bottom in 806 ms.
 
-Known limit: memory is ~6x file size, so multi-GB files are not yet supported.
-Documents consisting of one multi-megabyte line cost ~65-80ms per edit.
+Known limits: memory is several times the file size, so multi-GB files are not
+supported. Reading the file is now the largest part of opening it. Documents
+consisting of one multi-megabyte line cost ~65-80 ms per edit.
 
 ## Building
 

@@ -79,6 +79,13 @@ public final class SyntaxHighlighter {
     /// good line if necessary.
     public func state(atLine line: Int) -> Lexer.State {
         guard line > 0 else { return .initial }
+        // The only thing carried across a line boundary is block-comment depth,
+        // so a language without block comments has nothing to carry: the state
+        // entering any line is the initial one. Without this, jumping to the end
+        // of a large log means lexing every line before it just to learn that
+        // nothing was open — half a minute on a 100 MB file.
+        guard lexer.language.blockCommentOpen != nil,
+              lexer.language.blockCommentClose != nil else { return .initial }
         if line < validPrefix, line < lineStates.count { return lineStates[line] }
 
         let content = text as NSString
@@ -89,7 +96,18 @@ public final class SyntaxHighlighter {
             let start = lineStarts[index]
             let end = index + 1 < lineStarts.count ? lineStarts[index + 1] : content.length
             guard end >= start else { break }
-            let chunk = content.substring(with: NSRange(location: start, length: end - start))
+            let lineRange = NSRange(location: start, length: end - start)
+            // A line containing neither delimiter cannot change the depth,
+            // whatever else is on it — so it needs no lexing, only a search.
+            // Most lines of most files are this case, and skipping them avoids
+            // copying and tokenising every line ahead of the one asked for.
+            if !containsDelimiter(content, lineRange) {
+                index += 1
+                if lineStates.count > index { lineStates[index] = current }
+                else { lineStates.append(current) }
+                continue
+            }
+            let chunk = content.substring(with: lineRange)
             current = lexer.tokenize(chunk, startingIn: current).endState
             index += 1
             if lineStates.count > index {
@@ -100,6 +118,21 @@ public final class SyntaxHighlighter {
         }
         validPrefix = max(validPrefix, min(line + 1, lineStates.count))
         return lineStates.indices.contains(line) ? lineStates[line] : current
+    }
+
+    /// Whether `range` contains either block-comment delimiter.
+    ///
+    /// Only these can change the state carried across a line boundary: with
+    /// neither present the depth entering the next line is the depth entering
+    /// this one, so the line can be stepped over without being tokenised.
+    private func containsDelimiter(_ content: NSString, _ range: NSRange) -> Bool {
+        for delimiter in [lexer.language.blockCommentOpen, lexer.language.blockCommentClose] {
+            guard let delimiter, !delimiter.isEmpty else { continue }
+            if content.range(of: delimiter, options: [.literal], range: range).location != NSNotFound {
+                return true
+            }
+        }
+        return false
     }
 
     /// The 0-based line containing `offset`.

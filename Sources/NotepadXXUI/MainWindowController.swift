@@ -64,6 +64,16 @@ public final class MainWindowController: NSWindowController {
     var horizontalTabConstraints: [NSLayoutConstraint] = []
     var verticalTabConstraints: [NSLayoutConstraint] = []
     var multiCaretMonitor: Any?
+
+    /// The last message shown by `presentError`, kept so tests can check that a
+    /// failure was reported rather than swallowed.
+    var lastReportedError: (message: String, detail: String?)?
+
+    /// Set to false by tests, where a modal alert would block the run.
+    static var presentsAlerts = true
+
+    /// The clipboard panel, kept so its pasteboard poll can be stopped.
+    weak var clipboardHistoryPanel: ClipboardHistoryPanel?
     var searchHistory: SearchHistory?
     var lastSearchOptions = SearchOptions()
     /// Marked ranges per document, for the Mark tab's five styles.
@@ -267,6 +277,7 @@ public final class MainWindowController: NSWindowController {
 
         content.onAppearanceChange = { [weak self] in self?.appearanceDidChange() }
         installDocumentSwitcherShortcut()
+        window.delegate = self
         window.contentView = content
     }
 
@@ -544,6 +555,20 @@ public final class MainWindowController: NSWindowController {
         return result
     }
 
+    /// Newlines inside `range`, without copying the text out of `content`.
+    static func newlineCount(in content: NSString, range: NSRange) -> Int {
+        var count = 0
+        var searchRange = range
+        while searchRange.length > 0 {
+            let found = content.range(of: "\n", options: [.literal], range: searchRange)
+            guard found.location != NSNotFound else { break }
+            count += 1
+            let next = NSMaxRange(found)
+            searchRange = NSRange(location: next, length: NSMaxRange(range) - next)
+        }
+        return count
+    }
+
     private func refreshStatus() {
         guard documents.indices.contains(activeIndex) else { return }
         let document = documents[activeIndex]
@@ -554,19 +579,25 @@ public final class MainWindowController: NSWindowController {
         let ranges = controller.selectedRanges
         let content = document.text as NSString
         let totalSelected = ranges.reduce(0) { $0 + $1.length }
-        let selectedText = ranges
-            .filter { $0.length > 0 && NSMaxRange($0) <= content.length }
-            .map { content.substring(with: $0) }
-            .joined(separator: "\n")
+        // Counted in place rather than by copying the selection out: Select All
+        // in a 100 MB document would otherwise allocate a second copy of it on
+        // every caret movement, just to count the newlines in it.
+        let selectionRanges = ranges.filter { $0.length > 0 && NSMaxRange($0) <= content.length }
+        let selectionLines = selectionRanges.reduce(0) { total, range in
+            total + Self.newlineCount(in: content, range: range) + 1
+        }
 
         statusBar.update(DSStatusBar.Model(
             documentType: document.languageName ?? "Normal text file",
             length: content.length,
-            lines: document.text.isEmpty ? 1 : LineEnding.counts(in: document.text).lf + 1,
+            // From the layout manager's line index, not by rescanning the text:
+            // this runs on every keystroke and every caret movement, so a scan
+            // of the whole document here makes a large file unusable to type in.
+            lines: document.text.isEmpty ? 1 : controller.lineCount,
             caretLine: caret.line,
             caretColumn: caret.column,
             selectionCharacters: totalSelected,
-            selectionLines: selectedText.isEmpty ? 0 : LineEnding.counts(in: selectedText).lf + 1,
+            selectionLines: selectionLines,
             caretCount: ranges.count,
             lineEnding: document.lineEnding.displayName,
             lineEndingShort: document.lineEnding.shortName,
@@ -743,9 +774,30 @@ public final class MainWindowController: NSWindowController {
         // A folded region is physically absent from the buffer, so restore
         // every fold before writing or the file would lose those lines.
         unfoldAll()
-        try? document.save()
+        guard write(document) else { return }
         currentEditor?.documentDidSave()
         refreshTabs()
+    }
+
+    /// Writes a document, telling the user if it did not work.
+    ///
+    /// A discarded save error is a way to lose someone's work: the write fails
+    /// on a read-only file or a full disk, nothing appears on screen, and the
+    /// post-save bookkeeping then marks the gutter's changes as saved. So the
+    /// result is reported, and the caller does that bookkeeping only on success.
+    @discardableResult
+    func write(_ document: TextDocument, to url: URL? = nil) -> Bool {
+        do {
+            try document.save(to: url)
+            return true
+        } catch {
+            let failure = error as? TextDocument.SaveError
+            presentError("The document “\(document.displayName)” could not be saved.",
+                         detail: [failure?.errorDescription ?? error.localizedDescription,
+                                  failure?.recoverySuggestion]
+                            .compactMap { $0 }.joined(separator: " "))
+            return false
+        }
     }
 
     @objc public func saveDocumentAsAction(_ sender: Any?) {
@@ -754,13 +806,16 @@ public final class MainWindowController: NSWindowController {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = document.displayName
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        try? document.save(to: url)
+        guard write(document, to: url) else { return }
+        currentEditor?.documentDidSave()
         refreshTabs()
     }
 
     @objc public func saveAllAction(_ sender: Any?) {
         for document in documents where !document.isUntitled && document.isDirty {
-            try? document.save()
+            // One unwritable file must not stop the rest from being saved, but
+            // it must still be reported rather than passed over in silence.
+            guard write(document) else { continue }
             for pane in 0...1 {
                 editors[EditorKey(document: document.id, pane: pane)]?.documentDidSave()
             }
@@ -779,6 +834,21 @@ public final class MainWindowController: NSWindowController {
     @objc public func goToLineAction(_ sender: Any?) {
         // Placeholder until the Go To dialog lands; keeps the menu item live.
         NSSound.beep()
+    }
+}
+
+extension MainWindowController: NSWindowDelegate {
+    /// Event monitors are global to the application, not owned by the window,
+    /// so one that is never removed outlives every window that installed it.
+    public func windowWillClose(_ notification: Notification) {
+        for monitor in [documentSwitcherMonitor, multiCaretMonitor].compactMap({ $0 }) {
+            NSEvent.removeMonitor(monitor)
+        }
+        documentSwitcherMonitor = nil
+        multiCaretMonitor = nil
+        // A repeating timer is retained by the run loop, so the clipboard poll
+        // would keep waking the process for the rest of the session.
+        clipboardHistoryPanel?.stopPolling()
     }
 }
 

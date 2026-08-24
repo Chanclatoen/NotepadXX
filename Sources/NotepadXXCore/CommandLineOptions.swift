@@ -23,6 +23,10 @@ public struct CommandLineOptions: Equatable, Sendable {
     public var newInstance = false
     public var noSession = false
     public var screenshotPath: String?
+    /// `--benchmark <file>` times opening, editing and scrolling that file,
+    /// prints the numbers and exits. The performance table in the README is
+    /// produced by this, so the claim can be re-checked rather than trusted.
+    public var benchmarkPath: String?
 
     public init() {}
 
@@ -44,6 +48,11 @@ public struct CommandLineOptions: Equatable, Sendable {
                 options.newInstance = true
             case argument == "-nosession" || argument == "--no-session":
                 options.noSession = true
+            case argument == "--benchmark":
+                if index < arguments.count {
+                    options.benchmarkPath = arguments[index]
+                    index += 1
+                }
             case argument == "--screenshot":
                 if index < arguments.count {
                     options.screenshotPath = arguments[index]

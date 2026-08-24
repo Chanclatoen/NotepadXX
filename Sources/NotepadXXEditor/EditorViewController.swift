@@ -485,6 +485,15 @@ public final class EditorViewController: NSViewController {
         storage.endEditing()
     }
 
+    /// Bytes to assume are on screen when layout has not run yet: enough to
+    /// cover any plausible window, small enough to lex instantly.
+    static let assumedScreenfulLength = 40_000
+    /// The most lines one highlighting pass will ever lex.
+    static let maximumLinesPerHighlightPass = 5_000
+
+    /// The lines the last pass covered, so a test can check it stayed bounded.
+    public private(set) var lastHighlightedLineRange: ClosedRange<Int>?
+
     /// Highlights the lines currently on screen (plus a margin), which is what
     /// keeps highlighting affordable on very large documents.
     public func highlightVisibleRegion() {
@@ -494,16 +503,26 @@ public final class EditorViewController: NSViewController {
         let startOffset = textView.layoutManager.textOffsetAtPoint(
             CGPoint(x: 0, y: max(0, visible.minY))
         ) ?? 0
+        // Before the first layout there are no line fragments, so asking for the
+        // offset at the bottom of the viewport returns nil. Falling back to the
+        // end of the storage would ask the lexer for the *whole document* — on a
+        // 100 MB log that is a half-minute freeze on open, which is exactly the
+        // case this method exists to avoid. Fall back to a screenful instead.
         let endOffset = textView.layoutManager.textOffsetAtPoint(
             CGPoint(x: 0, y: visible.maxY)
-        ) ?? storage.length
+        ) ?? min(storage.length, startOffset + Self.assumedScreenfulLength)
 
         let margin = 200   // lines of slack so scrolling stays smooth
         let firstLine = max(0, highlighter.line(containing: min(startOffset, storage.length)) - margin)
+        let visibleLastLine = highlighter.line(containing: min(endOffset, max(0, storage.length - 1)))
+        // A hard ceiling as well: whatever the viewport reports, one pass must
+        // stay bounded. The rest is highlighted as the user scrolls to it.
         let lastLine = min(highlighter.lineCount - 1,
-                           highlighter.line(containing: min(endOffset, max(0, storage.length - 1))) + margin)
+                           visibleLastLine + margin,
+                           firstLine + Self.maximumLinesPerHighlightPass)
         guard firstLine <= lastLine else { return }
 
+        lastHighlightedLineRange = firstLine...lastLine
         let tokens = highlighter.tokens(forLines: firstLine...lastLine)
         let regionStart = min(startOffset, storage.length)
         let regionEnd = min(max(endOffset, regionStart), storage.length)
@@ -678,7 +697,8 @@ public final class EditorViewController: NSViewController {
         let visible = scrollView.documentVisibleRect
         let length = (textView.string as NSString).length
         let start = textView.layoutManager.textOffsetAtPoint(CGPoint(x: 0, y: max(0, visible.minY))) ?? 0
-        let end = textView.layoutManager.textOffsetAtPoint(CGPoint(x: 0, y: visible.maxY)) ?? length
+        let end = textView.layoutManager.textOffsetAtPoint(CGPoint(x: 0, y: visible.maxY))
+            ?? min(length, start + Self.assumedScreenfulLength)
         let first = highlighter.line(containing: min(start, length))
         let last = highlighter.line(containing: min(max(end, start), length))
         return first...max(first, last)
@@ -757,6 +777,10 @@ public final class EditorViewController: NSViewController {
         // The engine blinks its own cursors on a fixed timer that cannot be
         // reached from here. Re-showing them faster than it hides them keeps a
         // non-blinking caret steady.
+        // Only while this editor is actually on screen. A repeating timer is
+        // retained by the run loop, so one left running outlives the editor it
+        // belonged to and keeps firing ten times a second forever.
+        guard view.window != nil else { return }
         caretRefreshTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
@@ -764,6 +788,22 @@ public final class EditorViewController: NSViewController {
             }
         }
     }
+
+    public override func viewDidAppear() {
+        super.viewDidAppear()
+        // Re-arm whatever the caret settings asked for now there is a window.
+        applyCaretAppearance()
+    }
+
+    public override func viewDidDisappear() {
+        super.viewDidDisappear()
+        // Nothing to keep steady once the editor is off screen.
+        caretRefreshTimer?.invalidate()
+        caretRefreshTimer = nil
+    }
+
+    /// Whether a caret timer is currently scheduled, so a leak is detectable.
+    var hasCaretTimer: Bool { caretRefreshTimer != nil }
 
     /// Bottom inset of roughly a screenful, which is what "scroll past the
     /// last line" means in an editor.
