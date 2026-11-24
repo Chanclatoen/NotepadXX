@@ -89,20 +89,25 @@ swift build -c release
 ./.build/release/NotepadXX --benchmark /path/to/large-file --no-session
 ```
 
-Measured on an Apple M4, release build, on a 100 MB log of 1,120,754 lines:
+Measured on an Apple M4, release build, on a 100 MB log of 924,176 lines. The
+file is opened and saved through the same calls the menus use:
 
 | operation | result |
 |---|---|
-| open (read 1,730 ms + build the view 684 ms) | **2.4 s** |
-| edit (insert at the start) | 395 ms |
-| scroll to the bottom | 307 ms |
-| resident memory | 875 MB |
+| open | **1.8 s**, read in the background; the main thread never waited more than 146 ms |
+| edit (insert at the start) | 387 ms |
+| scroll to the bottom | 274 ms |
+| save | 1.7 s (on the main thread) |
+| resident memory | 813 MB after opening |
+
+Files of 5 MB and more open with a progress bar and a Cancel button; the
+window stays responsive while the text arrives.
 
 A 60 MB C source file, which has block comments and so cannot skip the lexer
 state scan, opens in 1.6 s and scrolls to the bottom in 806 ms.
 
 Known limits: memory is several times the file size, so multi-GB files are not
-supported. Reading the file is now the largest part of opening it. Documents
+supported. Saving a large file still holds the main thread. Documents
 consisting of one multi-megabyte line cost ~65-80 ms per edit.
 
 ## Building
