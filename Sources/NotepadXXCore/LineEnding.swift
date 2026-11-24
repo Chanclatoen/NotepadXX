@@ -76,9 +76,10 @@ public enum LineEnding: String, CaseIterable, Sendable {
 
     /// Rewrites every terminator to `target`, collapsing mixed input.
     ///
-    /// A document that already uses `target` throughout comes back as the same
-    /// string with no copy, which is the common case for both opening and
-    /// saving a large file.
+    /// A document that already uses `target` throughout comes back as is, with
+    /// no rewrite, which is the common case for both opening and saving a large
+    /// file. The result is always native UTF-8, so the next step (encoding it
+    /// for disk) does not have to convert a bridged string a second time.
     public static func normalize(_ string: String, to target: LineEnding) -> String {
         var source = string
         source.makeContiguousUTF8()
@@ -86,7 +87,7 @@ public enum LineEnding: String, CaseIterable, Sendable {
             let count = bytes.count
             guard let base = bytes.baseAddress, count > 0 else { return string }
             let hasCR = memchr(base, 13, count) != nil
-            if target == .lf && !hasCR { return string }
+            if target == .lf && !hasCR { return source }
             let replacement = Array(target.rawValue.utf8)
             let capacity = replacement.count == 2 ? count * 2 : count
             return String(unsafeUninitializedCapacity: capacity) { out in
