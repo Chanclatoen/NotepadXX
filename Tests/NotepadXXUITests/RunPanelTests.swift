@@ -46,6 +46,7 @@ final class RunPanelTests: XCTestCase {
 
     /// Output capture is the point of the checkbox: the panel has to fill.
     func testCapturedOutputReachesTheRunPanel() throws {
+        try XCTSkipIf(BuildFlavour.isAppStore, "App Store build: no Run command")
         let controller = make()
         let output = try XCTUnwrap(controller.runOutputPanel)
         controller.execute(command: "echo captured-output", capturingOutput: true)
@@ -58,6 +59,7 @@ final class RunPanelTests: XCTestCase {
     }
 
     func testAFailingCommandReportsItsStatus() throws {
+        try XCTSkipIf(BuildFlavour.isAppStore, "App Store build: no Run command")
         let controller = make()
         let output = try XCTUnwrap(controller.runOutputPanel)
         controller.execute(command: "exit 3", capturingOutput: true)

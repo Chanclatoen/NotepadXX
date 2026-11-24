@@ -65,6 +65,7 @@ final class PluginRepositoryTests: XCTestCase {
     }
 
     func testInstallVerifiesChecksumAndUnpacks() async throws {
+        try XCTSkipIf(BuildFlavour.isAppStore, "App Store build: no plug-in downloads")
         let dir = try workspace()
         let listing = try makeLocalPlugin(in: dir, identifier: "com.test.install", version: "1.0")
         let catalogue = try writeCatalogue([listing], in: dir)
@@ -102,6 +103,7 @@ final class PluginRepositoryTests: XCTestCase {
     }
 
     func testArchiveWithThePluginOneLevelDownStillInstalls() async throws {
+        try XCTSkipIf(BuildFlavour.isAppStore, "App Store build: no plug-in downloads")
         let dir = try workspace()
         let listing = try makeLocalPlugin(in: dir, identifier: "com.test.nested", version: "1.0", nested: true)
         let plugins = dir.appendingPathComponent("plugins", isDirectory: true)

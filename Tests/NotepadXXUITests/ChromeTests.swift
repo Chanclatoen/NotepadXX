@@ -24,7 +24,8 @@ final class ToolbarTests: XCTestCase {
         let labels = groups.flatMap { $0 }.map(\.label)
         for expected in ["New", "Open", "Save", "Save All", "Print", "Cut", "Copy", "Paste",
                          "Undo", "Redo", "Find", "Replace", "Zoom In", "Zoom Out",
-                         "Word Wrap", "Document Map", "Function List", "Run…"] {
+                         "Word Wrap", "Document Map", "Function List"]
+            + (BuildFlavour.isAppStore ? [] : ["Run…"]) {
             XCTAssertTrue(labels.contains(expected), "toolbar is missing \(expected)")
         }
         XCTAssertGreaterThan(groups.count, 5, "buttons are grouped, not one long row")

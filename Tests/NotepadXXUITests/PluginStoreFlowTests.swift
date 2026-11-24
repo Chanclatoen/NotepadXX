@@ -51,6 +51,7 @@ final class PluginStoreFlowTests: XCTestCase {
 
     /// Install from the catalogue, then actually run the plugin's command.
     func testInstallFromCatalogueThenRunIt() async throws {
+        try XCTSkipIf(BuildFlavour.isAppStore, "App Store build: no plug-in downloads")
         let dir = try workspace()
         let catalogue = try buildCatalogue(in: dir)
         let repository = PluginRepository(directory: dir, sourceURLs: [catalogue])
@@ -80,6 +81,7 @@ final class PluginStoreFlowTests: XCTestCase {
     }
 
     func testMimeToolsRoundTripsBase64() async throws {
+        try XCTSkipIf(BuildFlavour.isAppStore, "App Store build: no plug-in downloads")
         let dir = try workspace()
         let catalogue = try buildCatalogue(in: dir)
         let repository = PluginRepository(directory: dir, sourceURLs: [catalogue])
@@ -107,6 +109,7 @@ final class PluginStoreFlowTests: XCTestCase {
     /// An installed plugin appears in the Plugins menu, which is how the user
     /// actually reaches it.
     func testInstalledPluginAppearsInTheMenu() async throws {
+        try XCTSkipIf(BuildFlavour.isAppStore, "App Store build: no plug-in downloads")
         let dir = try workspace()
         let catalogue = try buildCatalogue(in: dir)
         let repository = PluginRepository(directory: dir, sourceURLs: [catalogue])

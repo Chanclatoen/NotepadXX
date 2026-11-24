@@ -135,6 +135,7 @@ final class PluginArchiveSafetyTests: XCTestCase {
     /// link. A plug-in folder containing a link out is a foothold, so the
     /// install is refused outright.
     func testAnArchiveContainingALinkIsRefused() async throws {
+        try XCTSkipIf(BuildFlavour.isAppStore, "App Store build: no plug-in downloads")
         let workspace = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: workspace) }
 
@@ -168,6 +169,7 @@ final class PluginArchiveSafetyTests: XCTestCase {
 
     /// An ordinary plug-in still installs — the check must not refuse everything.
     func testAnOrdinaryArchiveStillInstalls() async throws {
+        try XCTSkipIf(BuildFlavour.isAppStore, "App Store build: no plug-in downloads")
         let workspace = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: workspace) }
 
