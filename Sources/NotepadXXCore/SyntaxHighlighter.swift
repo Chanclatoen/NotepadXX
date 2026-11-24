@@ -30,9 +30,11 @@ public final class SyntaxHighlighter {
     }
 
     /// Replaces the document. Line offsets are recomputed; states are dropped.
-    public func setText(_ newText: String) {
+    /// `lineStarts` may be supplied when the caller already computed them off
+    /// the main thread; they must be `computeLineStarts(newText)`.
+    public func setText(_ newText: String, lineStarts precomputed: [Int]? = nil) {
         text = newText
-        lineStarts = Self.computeLineStarts(newText)
+        lineStarts = precomputed ?? Self.computeLineStarts(newText)
         lineStates = [.initial]
         validPrefix = 1
     }
@@ -151,7 +153,7 @@ public final class SyntaxHighlighter {
         return first...max(first, last)
     }
 
-    static func computeLineStarts(_ text: String) -> [Int] {
+    public static func computeLineStarts(_ text: String) -> [Int] {
         let content = text as NSString
         var starts: [Int] = [0]
         content.enumerateSubstrings(

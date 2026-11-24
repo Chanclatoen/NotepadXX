@@ -98,6 +98,7 @@ public enum Benchmark {
             let report = """
             file          \(String(format: "%.1f", megabytes)) MB, \(lines) lines
             open          \(row("open"))
+            after open    \(String(format: "main thread blocked at most %.0f ms in the next 1.5 s", timings["idle"]?.block ?? 0))
             peak resident \(String(format: "%.0f", openPeak)) MB after open, \(String(format: "%.0f", peakMegabytes())) MB at end
             edit at start \(row("edit"))
             scroll to end \(row("scroll"))
@@ -138,6 +139,11 @@ public enum Benchmark {
             lines = document.text.utf8.reduce(into: 1) { count, byte in
                 if byte == 10 { count += 1 }
             }
+            // Work the open left queued behind it (highlighting, status) is part
+            // of what a person feels, so it gets its own window.
+            measure("idle", { done in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { done() }
+            }, then: {
             // An insert at the very start is the worst case: everything after it
             // moves, so this is where a quadratic layout would show up.
             measure("edit", { done in
@@ -158,6 +164,7 @@ public enum Benchmark {
                         done()
                     }, then: finish)
                 })
+            })
             })
         })
     }

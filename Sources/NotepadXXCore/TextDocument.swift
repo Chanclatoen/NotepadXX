@@ -64,6 +64,8 @@ public final class TextDocument: Identifiable, @unchecked Sendable {
     public enum LoadError: Error, Equatable {
         case unreadable(String)
         case undecodable(String)
+        /// The caller stopped the load before it finished.
+        case cancelled
     }
 
     /// Reads a file, detecting encoding and line ending. The in-memory text is
@@ -71,20 +73,56 @@ public final class TextDocument: Identifiable, @unchecked Sendable {
     /// `lineEnding` and re-applied on save. This keeps every offset-based
     /// operation (search, selection, column mode) free of CRLF special-casing.
     public static func load(contentsOf url: URL) throws -> TextDocument {
-        let data: Data
-        do { data = try Data(contentsOf: url) }
-        catch { throw LoadError.unreadable(error.localizedDescription) }
+        try load(contentsOf: url, progress: nil, isCancelled: nil)
+    }
 
+    /// Bytes read between progress reports and cancellation checks.
+    static let readChunkLength = 8 * 1_048_576
+
+    /// Same as `load(contentsOf:)`, for use off the main thread: the file is
+    /// read in chunks so `progress` (0...1) can be reported and `isCancelled`
+    /// honoured between them, which `Data(contentsOf:)` cannot do.
+    public static func load(
+        contentsOf url: URL,
+        progress: ((Double) -> Void)?,
+        isCancelled: (() -> Bool)?
+    ) throws -> TextDocument {
+        let data: Data
+        do {
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            let total = (try? handle.seekToEnd()).map(Int.init) ?? 0
+            try handle.seek(toOffset: 0)
+            var collected = Data()
+            collected.reserveCapacity(total)
+            while true {
+                if isCancelled?() == true { throw LoadError.cancelled }
+                guard let chunk = try handle.read(upToCount: readChunkLength), !chunk.isEmpty else { break }
+                collected.append(chunk)
+                if total > 0 { progress?(0.8 * Double(collected.count) / Double(total)) }
+            }
+            data = collected
+        } catch let error as LoadError {
+            throw error
+        } catch {
+            throw LoadError.unreadable(error.localizedDescription)
+        }
+
+        if isCancelled?() == true { throw LoadError.cancelled }
         let encoding = EncodingDetector.detect(data: data)
         guard let raw = EncodingDetector.decode(data: data, as: encoding) else {
             throw LoadError.undecodable(url.lastPathComponent)
         }
+        progress?(0.9)
+        if isCancelled?() == true { throw LoadError.cancelled }
         let ending = LineEnding.detect(in: raw) ?? .platformDefault
+        let text = LineEnding.normalize(raw, to: .lf)
         let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        progress?(1)
 
         return TextDocument(
             fileURL: url,
-            text: LineEnding.normalize(raw, to: .lf),
+            text: text,
             encoding: encoding,
             lineEnding: ending,
             isDirty: false,
