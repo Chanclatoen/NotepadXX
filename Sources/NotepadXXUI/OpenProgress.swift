@@ -16,11 +16,13 @@ public final class OpenProgressView: NSVisualEffectView {
 
     public init(fileName: String) {
         super.init(frame: .zero)
-        material = .hudWindow
+        material = .sheet
         blendingMode = .withinWindow
         state = .active
         wantsLayer = true
         layer?.cornerRadius = 10
+        layer?.borderWidth = 1
+        applyColours()
         label.stringValue = "Opening \(fileName)…"
         label.lineBreakMode = .byTruncatingMiddle
         bar.isIndeterminate = false
@@ -53,6 +55,19 @@ public final class OpenProgressView: NSVisualEffectView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    /// Solid, so the text behind the bar does not show through it.
+    private func applyColours() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+            layer?.borderColor = NSColor.separatorColor.cgColor
+        }
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyColours()
+    }
 
     public func setProgress(_ value: Double) {
         fraction = max(fraction, min(1, value))
