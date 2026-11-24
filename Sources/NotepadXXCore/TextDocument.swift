@@ -87,6 +87,7 @@ public final class TextDocument: Identifiable, @unchecked Sendable {
         progress: ((Double) -> Void)?,
         isCancelled: (() -> Bool)?
     ) throws -> TextDocument {
+        BookmarkStore.shared?.access(url.path)
         let data: Data
         do {
             let handle = try FileHandle(forReadingFrom: url)
@@ -119,6 +120,7 @@ public final class TextDocument: Identifiable, @unchecked Sendable {
         let text = LineEnding.normalize(raw, to: .lf)
         let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
         progress?(1)
+        BookmarkStore.shared?.remember(url)
 
         return TextDocument(
             fileURL: url,
@@ -171,6 +173,7 @@ public final class TextDocument: Identifiable, @unchecked Sendable {
 
         fileURL = destination
         isDirty = false
+        BookmarkStore.shared?.remember(destination)
         let attributes = try? FileManager.default.attributesOfItem(atPath: destination.path)
         lastKnownModification = attributes?[.modificationDate] as? Date
     }

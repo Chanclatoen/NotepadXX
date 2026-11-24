@@ -22,9 +22,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // Snapshots go to the folder the user chose, when they chose one.
         let supportDirectory = (try? SessionStore.defaultDirectory())
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        BookmarkStore.shared = BookmarkStore(directory: supportDirectory)
         let preferencesForStartup = try? PreferencesStore(directory: supportDirectory)
+        // Sandboxed, a folder chosen in an earlier launch is only reachable
+        // through its bookmark; without one the default location is used.
         let backupDirectory = preferencesForStartup?.preferences.backupDirectory
             .map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
+            .flatMap { BuildFlavour.isAppStore ? BookmarkStore.shared?.access($0.path) : $0 }
         sessionStore = try? SessionStore(directory: backupDirectory ?? supportDirectory)
         windowController = MainWindowController()
 

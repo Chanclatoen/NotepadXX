@@ -236,6 +236,10 @@ public final class PluginRepository {
     // MARK: - Helpers
 
     private func unzip(_ archive: URL, into directory: URL) throws {
+        #if MAS
+        // The App Store build installs no downloaded code (and has no /usr/bin/unzip to run).
+        throw RepositoryError.notAnArchive(archive.lastPathComponent)
+        #else
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
         process.arguments = ["-q", "-o", archive.path, "-d", directory.path]
@@ -246,6 +250,7 @@ public final class PluginRepository {
         guard process.terminationStatus == 0 else {
             throw RepositoryError.notAnArchive(archive.lastPathComponent)
         }
+        #endif
     }
 
     /// Refuses an unpacked archive that contains symbolic links.

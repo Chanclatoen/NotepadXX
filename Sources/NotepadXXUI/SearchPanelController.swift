@@ -498,7 +498,8 @@ public final class SearchPanelController: NSWindowController {
             ),
             inSelection: inSelection.state == .on,
             directory: directoryField.stringValue.isEmpty
-                ? nil : URL(fileURLWithPath: (directoryField.stringValue as NSString).expandingTildeInPath),
+                ? nil : BookmarkStore.shared?.access((directoryField.stringValue as NSString).expandingTildeInPath)
+                    ?? URL(fileURLWithPath: (directoryField.stringValue as NSString).expandingTildeInPath),
             filters: filtersField.stringValue,
             exclusions: exclusionsField.stringValue,
             includeSubfolders: subfolders.state == .on,
@@ -548,6 +549,7 @@ public final class SearchPanelController: NSWindowController {
         picker.canChooseFiles = false
         picker.prompt = "Choose"
         guard picker.runModal() == .OK, let url = picker.url else { return }
+        BookmarkStore.shared?.remember(url)
         setDirectory(url)
     }
 }

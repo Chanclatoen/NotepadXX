@@ -1,4 +1,5 @@
 import AppKit
+import NotepadXXCore
 
 /// The menu bar, mirroring Notepad++'s layout (File / Edit / Search / View /
 /// Encoding / Language / Settings / Macro / Run / Window / Help) adapted to
@@ -20,8 +21,11 @@ public enum MainMenu {
         root.addItem(languageMenu())
         root.addItem(settingsMenu())
         root.addItem(macroMenu())
-        root.addItem(runMenu())
-        root.addItem(pluginsMenu())
+        // No shell commands and no downloaded plug-ins in the sandboxed App Store build.
+        if !BuildFlavour.isAppStore {
+            root.addItem(runMenu())
+            root.addItem(pluginsMenu())
+        }
         root.addItem(windowMenu())
         root.addItem(helpMenu())
         return root

@@ -199,11 +199,11 @@ public final class PluginsAdminWindowController: NSWindowController {
         alert.addButton(withTitle: "Cancel")
         alert.beginSheetModal(for: window) { response in
             guard response == .alertFirstButtonReturn else { return }
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-            task.arguments = ["-n", Bundle.main.bundlePath]
-            try? task.run()
-            NSApp.terminate(nil)
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.createsNewApplicationInstance = true
+            NSWorkspace.shared.openApplication(
+                at: URL(fileURLWithPath: Bundle.main.bundlePath), configuration: configuration
+            ) { _, _ in DispatchQueue.main.async { NSApp.terminate(nil) } }
         }
     }
 

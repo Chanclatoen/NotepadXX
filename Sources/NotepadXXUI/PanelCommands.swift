@@ -119,6 +119,7 @@ extension MainWindowController {
         picker.canChooseFiles = false
         picker.prompt = "Open as Workspace"
         guard picker.runModal() == .OK, let url = picker.url else { return }
+        BookmarkStore.shared?.remember(url)
         openWorkspace(at: url)
     }
 

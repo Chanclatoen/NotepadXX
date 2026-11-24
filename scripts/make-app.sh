@@ -5,7 +5,17 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 CONFIG=${CONFIG:-release}
+# FLAVOUR=direct (default): today's build. FLAVOUR=mas: the sandboxed Mac App
+# Store build (-DMAS, scripts/NotepadXX-MAS.entitlements, dist/NotepadXX-MAS.app).
+FLAVOUR=${FLAVOUR:-direct}
 APP="dist/NotepadXX.app"
+FLAGS=()
+if [[ "$FLAVOUR" == "mas" ]]; then
+  APP="dist/NotepadXX-MAS.app"
+  FLAGS=(-Xswiftc -DMAS)
+elif [[ "$FLAVOUR" != "direct" ]]; then
+  echo "FLAVOUR must be direct or mas" >&2; exit 2
+fi
 
 # A universal build is opt-in because the second slice is a full cross-compile
 # and takes minutes; day-to-day builds do not need it, releases do.
@@ -16,18 +26,18 @@ APP="dist/NotepadXX.app"
 # pulls in ("Missing package product 'SwiftLint@11'").
 if [[ "${UNIVERSAL:-0}" == "1" ]]; then
   echo "==> building arm64"
-  swift build -c "$CONFIG" --triple arm64-apple-macosx14.0
+  swift build -c "$CONFIG" ${FLAGS[@]+"${FLAGS[@]}"} --triple arm64-apple-macosx14.0
   echo "==> building x86_64 (cross-compile, slow)"
-  swift build -c "$CONFIG" --triple x86_64-apple-macosx14.0
+  swift build -c "$CONFIG" ${FLAGS[@]+"${FLAGS[@]}"} --triple x86_64-apple-macosx14.0
 
-  ARM=$(swift build -c "$CONFIG" --triple arm64-apple-macosx14.0 --show-bin-path)/NotepadXX
-  INTEL=$(swift build -c "$CONFIG" --triple x86_64-apple-macosx14.0 --show-bin-path)/NotepadXX
+  ARM=$(swift build -c "$CONFIG" ${FLAGS[@]+"${FLAGS[@]}"} --triple arm64-apple-macosx14.0 --show-bin-path)/NotepadXX
+  INTEL=$(swift build -c "$CONFIG" ${FLAGS[@]+"${FLAGS[@]}"} --triple x86_64-apple-macosx14.0 --show-bin-path)/NotepadXX
   BIN="$(mktemp -d)/NotepadXX"
   lipo -create -output "$BIN" "$ARM" "$INTEL"
   echo "==> universal: $(lipo -archs "$BIN")"
 else
-  swift build -c "$CONFIG"
-  BIN=$(swift build -c "$CONFIG" --show-bin-path)/NotepadXX
+  swift build -c "$CONFIG" ${FLAGS[@]+"${FLAGS[@]}"}
+  BIN=$(swift build -c "$CONFIG" ${FLAGS[@]+"${FLAGS[@]}"} --show-bin-path)/NotepadXX
 fi
 
 rm -rf "$APP"
@@ -67,5 +77,11 @@ PLIST
 # would not cover it.
 ./scripts/build-plugin-catalogue.sh "$APP/Contents/Resources"
 
-codesign --force --deep --sign - "$APP"
+if [[ "$FLAVOUR" == "mas" ]]; then
+  # Ad-hoc, with the sandbox entitlements, so the sandbox can be exercised
+  # locally. The App Store upload re-signs with the real identity and profile.
+  codesign --force --deep --options runtime --sign - --entitlements scripts/NotepadXX-MAS.entitlements "$APP"
+else
+  codesign --force --deep --sign - "$APP"
+fi
 echo "built $APP"

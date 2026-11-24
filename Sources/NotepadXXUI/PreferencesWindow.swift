@@ -768,7 +768,21 @@ public final class PreferencesWindowController: NSWindowController {
                 try? self?.store.update { $0[keyPath: keyPath] = text.isEmpty ? nil : text }
                 self?.commit()
             }
-            return field
+            // Sandboxed, a typed path grants nothing: the folder must be picked.
+            guard BuildFlavour.isAppStore, keyPath == \.backupDirectory else { return field }
+            field.isEditable = false
+            let choose = NSButton(title: "Choose…", target: nil, action: nil)
+            bind(choose) { [weak self] in
+                let picker = NSOpenPanel()
+                picker.canChooseDirectories = true
+                picker.canChooseFiles = false
+                guard picker.runModal() == .OK, let url = picker.url else { return }
+                BookmarkStore.shared?.remember(url)
+                field.stringValue = url.path
+                try? self?.store.update { $0[keyPath: keyPath] = url.path }
+                self?.commit()
+            }
+            return NSStackView(views: [field, choose])
 
         case .sheet(_, let buttonTitle, let note):
             let button = NSButton(title: buttonTitle, target: self, action: #selector(openSheet(_:)))

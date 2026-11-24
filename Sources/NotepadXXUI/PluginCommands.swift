@@ -40,7 +40,7 @@ extension MainWindowController: PluginEditorBridge {
 
     /// Loads enabled plugins and rebuilds the Plugins menu.
     public func reloadPlugins() {
-        guard let registry = pluginRegistry else { return }
+        guard !BuildFlavour.isAppStore, let registry = pluginRegistry else { return }
         registry.reload()
         let host = PluginHost(bridge: self)
         host.loadAll(registry.enabledPlugins)
@@ -108,7 +108,7 @@ extension MainWindowController: PluginEditorBridge {
     }
 
     @objc public func showPluginsAdminAction(_ sender: Any?) {
-        guard let registry = pluginRegistry else { return }
+        guard !BuildFlavour.isAppStore, let registry = pluginRegistry else { return }
         if pluginsAdminWindow == nil {
             pluginsAdminWindow = PluginsAdminWindowController(
                 registry: registry, repository: pluginRepository

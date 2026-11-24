@@ -1,4 +1,5 @@
 import AppKit
+import NotepadXXCore
 import NotepadXXDesign
 
 /// The toolbar's command set, in the design's groups and order.
@@ -7,7 +8,7 @@ import NotepadXXDesign
 /// equivalents, chosen to keep the same reading at 16 pt.
 enum ToolbarCatalogue {
     static func groups() -> [[DSToolbar.Item]] {
-        [
+        let all: [[DSToolbar.Item]] = [
             [
                 .init(symbol: "doc.badge.plus", label: "New",
                       selector: #selector(MainWindowController.newDocumentAction(_:))),
@@ -76,5 +77,8 @@ enum ToolbarCatalogue {
                       selector: #selector(MainWindowController.runCommandAction(_:)), shortcut: "⌘R"),
             ],
         ]
+        // The App Store build has no Run command.
+        guard BuildFlavour.isAppStore else { return all }
+        return all.map { $0.filter { $0.selector != #selector(MainWindowController.runCommandAction(_:)) } }
     }
 }

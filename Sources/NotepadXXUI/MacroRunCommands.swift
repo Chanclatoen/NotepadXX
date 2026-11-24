@@ -106,6 +106,10 @@ extension MainWindowController: MacroPlaybackTarget {
         return panel
     }
 
+    #if MAS
+    /// The App Store build has no Run menu and spawns no shell.
+    func execute(command: String, capturingOutput: Bool = false) {}
+    #else
     /// Runs a command through the user's shell.
     ///
     /// Output is captured into the Run Output panel when asked for, so a
@@ -176,4 +180,5 @@ extension MainWindowController: MacroPlaybackTarget {
             presentSheet(alert) { _ in }
         }
     }
+    #endif
 }
