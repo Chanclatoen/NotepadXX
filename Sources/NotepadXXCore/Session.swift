@@ -69,13 +69,36 @@ public final class SessionStore {
         try fileManager.createDirectory(at: backupsDirectory, withIntermediateDirectories: true)
     }
 
+    /// Where a non-interactive run (`--benchmark`, `--screenshot`) keeps its
+    /// state. Set once at launch, before anything reads `defaultDirectory()`.
+    nonisolated(unsafe) public static var directoryOverride: URL?
+
     /// Default location: ~/Library/Application Support/NotepadXX
+    ///
+    /// Tests, `--benchmark` and `--screenshot` must never touch the real one:
+    /// it holds the user's preferences, session and recent files, and a test
+    /// run once overwrote them. They get a scratch directory instead, and
+    /// `NOTEPADXX_SUPPORT_DIR` redirects any run explicitly.
     public static func defaultDirectory() throws -> URL {
-        let base = try FileManager.default.url(
+        let fileManager = FileManager.default
+        if let path = ProcessInfo.processInfo.environment["NOTEPADXX_SUPPORT_DIR"], !path.isEmpty {
+            return try ensured(URL(fileURLWithPath: (path as NSString).expandingTildeInPath, isDirectory: true))
+        }
+        if let directoryOverride { return try ensured(directoryOverride) }
+        if NSClassFromString("XCTestCase") != nil {
+            return try ensured(fileManager.temporaryDirectory
+                .appendingPathComponent("NotepadXX-tests-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true))
+        }
+        let base = try fileManager.url(
             for: .applicationSupportDirectory, in: .userDomainMask,
             appropriateFor: nil, create: true
         )
         return base.appendingPathComponent("NotepadXX", isDirectory: true)
+    }
+
+    private static func ensured(_ url: URL) throws -> URL {
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
     }
 
     /// Snapshots documents and writes the index atomically.

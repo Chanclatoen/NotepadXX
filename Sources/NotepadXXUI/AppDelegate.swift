@@ -13,6 +13,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = MainMenu.build()
 
         let options = CommandLineOptions.parse(CommandLine.arguments)
+        // A timing or screenshot run is a probe, not a session: it must not
+        // rewrite the user's preferences, session or recent files.
+        if options.benchmarkPath != nil || options.screenshotPath != nil {
+            SessionStore.directoryOverride = FileManager.default.temporaryDirectory
+                .appendingPathComponent("NotepadXX-probe-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
+        }
         // Snapshots go to the folder the user chose, when they chose one.
         let supportDirectory = (try? SessionStore.defaultDirectory())
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
@@ -208,6 +214,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationWillTerminate(_ notification: Notification) {
         persistSession()
+        if let probe = SessionStore.directoryOverride { try? FileManager.default.removeItem(at: probe) }
     }
 
     public func application(_ application: NSApplication, open urls: [URL]) {
