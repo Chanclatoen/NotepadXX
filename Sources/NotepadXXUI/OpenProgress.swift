@@ -97,6 +97,8 @@ extension MainWindowController {
     /// keeps responding meanwhile.
     public func openOrFocusAsync(url: URL, completion: @escaping @MainActor (Bool) -> Void = { _ in }) {
         if indexOfDocument(for: url) != nil { return completion(openOrFocus(url: url)) }
+        // Sandboxed, even the size lookup below needs the bookmark's grant.
+        BookmarkStore.shared?.access(url.path)
         let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? nil
         guard let size, size >= Self.backgroundOpenThreshold else { return completion(openOrFocus(url: url)) }
         let key = url.resolvingSymlinksInPath().standardizedFileURL

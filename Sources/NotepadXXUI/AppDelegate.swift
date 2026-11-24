@@ -115,13 +115,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // Sandbox checks: edit and save the restored file, or change it behind
         // the app's back and run the external-change check.
-        if ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "edit-save" {
+        if options.screenshotPath != nil, ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "edit-save" {
             let length = (windowController.currentEditor?.text as NSString?)?.length ?? 0
             windowController.currentEditor?.selectedRange = NSRange(location: length, length: 0)
             windowController.currentEditor?.replaceSelection(with: "\nsaved from the sandbox\n")
             windowController.saveDocumentAction(nil)
         }
-        if ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "external-change",
+        if options.screenshotPath != nil, ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "external-change",
            let url = windowController.activeDocument?.fileURL {
             try? "changed by another program\n".write(to: url, atomically: true, encoding: .utf8)
             try? FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(5)],
