@@ -136,9 +136,8 @@ public enum Benchmark {
             guard let document, !failed else { return finish() }
             openPeak = peakMegabytes()
             let view = controller.editorController(for: document)
-            lines = document.text.utf8.reduce(into: 1) { count, byte in
-                if byte == 10 { count += 1 }
-            }
+            let counts = LineEnding.counts(in: document.text)
+            lines = counts.lf + counts.crlf + counts.cr + 1
             // Work the open left queued behind it (highlighting, status) is part
             // of what a person feels, so it gets its own window.
             measure("idle", { done in
