@@ -215,7 +215,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Checks every 0.1 s, for up to a minute, whether the large files being
     /// opened have finished, then photographs the window.
-    private func waitForOpensThenCapture(_ path: String, attempts: Int = 600) {
+    @MainActor private func waitForOpensThenCapture(_ path: String, attempts: Int = 600) {
         if windowController.openingURLs.isEmpty || attempts == 0 {
             // One more turn so the last slice is laid out before the capture.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.capture(path) }
@@ -226,7 +226,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func capture(_ path: String) {
+    @MainActor private func capture(_ path: String) {
         // Set last: the theme applies a window appearance of its own,
         // so an override made earlier would be overwritten.
         if let appearance = ProcessInfo.processInfo.environment["NOTEPADXX_APPEARANCE"] {
