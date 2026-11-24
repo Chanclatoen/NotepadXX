@@ -19,7 +19,7 @@ extension MainWindowController {
 
         let workspace = FolderWorkspacePanel()
         workspace.onOpenFile = { [weak self] url in
-            self?.openOrFocus(url: url)
+            self?.openOrFocusAsync(url: url)
         }
 
         let clipboard = ClipboardHistoryPanel()
@@ -51,7 +51,7 @@ extension MainWindowController {
             guard let self, let name = self.activeProjectName else { return nil }
             return self.projectStore?.project(named: name)
         }
-        projects.onOpenFile = { [weak self] url in self?.openOrFocus(url: url) }
+        projects.onOpenFile = { [weak self] url in self?.openOrFocusAsync(url: url) }
         projects.onRemoveFile = { [weak self] path in
             guard let self, let store = self.projectStore, let name = self.activeProjectName,
                   var project = store.project(named: name) else { return }

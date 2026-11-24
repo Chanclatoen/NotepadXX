@@ -44,18 +44,25 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         var openedFromCommandLine = false
         for request in options.files {
             let url = URL(fileURLWithPath: (request.path as NSString).expandingTildeInPath)
-            guard windowController.openOrFocus(url: url) else { continue }
-            if options.readOnly, windowController.documents.indices.contains(windowController.activeIndex) {
-                windowController.documents[windowController.activeIndex].isReadOnly = true
-            }
-            if let line = request.line {
-                windowController.currentEditor?.goToLine(line)
-                if let column = request.column {
-                    windowController.currentEditor?.moveToColumn(column, onLine: line)
+            // A large file finishes later, so the follow-up looks the tab up
+            // by path instead of assuming it is still the active one.
+            windowController.openOrFocusAsync(url: url) { [weak windowController] opened in
+                guard opened, let windowController,
+                      let index = windowController.indexOfDocument(for: url) else { return }
+                openedFromCommandLine = true
+                windowController.selectTab(at: index)
+                if options.readOnly { windowController.documents[index].isReadOnly = true }
+                if let line = request.line {
+                    windowController.currentEditor?.goToLine(line)
+                    if let column = request.column {
+                        windowController.currentEditor?.moveToColumn(column, onLine: line)
+                    }
                 }
             }
-            openedFromCommandLine = true
         }
+        // A large file still being read counts as opened: a blank tab beside
+        // it would only be in the way.
+        if !windowController.openingURLs.isEmpty { openedFromCommandLine = true }
 
         if documents.isEmpty && !openedFromCommandLine {
             windowController.newDocument()
@@ -218,7 +225,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls {
-            windowController.openOrFocus(url: url)
+            windowController.openOrFocusAsync(url: url)
         }
     }
 

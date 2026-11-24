@@ -32,6 +32,11 @@ public final class MainWindowController: NSWindowController {
         let pane: Int
     }
     var editors: [EditorKey: EditorViewController] = [:]
+    /// Large files opened in the background: what the editor needs to take the
+    /// text in slices, kept until its editor is created.
+    var progressiveLoads: [UUID: [Int]] = [:]
+    /// Files being read right now, so opening one twice does not read it twice.
+    var openingURLs: [URL: OpenProgressView] = [:]
     private var untitledCounter = 0
     /// Indentation width used by tab/space conversion commands.
     public var tabWidth: Int = 4
@@ -264,7 +269,7 @@ public final class MainWindowController: NSWindowController {
         // Dropping files onto the window opens them.
         let dropView = FileDropView()
         dropView.onDrop = { [weak self] urls in
-            for url in urls { self?.openOrFocus(url: url) }
+            for url in urls { self?.openOrFocusAsync(url: url) }
         }
         dropView.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(dropView, positioned: .below, relativeTo: nil)
@@ -326,7 +331,14 @@ public final class MainWindowController: NSWindowController {
         controller.loadViewIfNeeded()
         if document.languageName == nil { autoDetectLanguage(for: document) }
         controller.setLanguage(document.languageName.flatMap { LanguageRegistry.shared.language(named: $0) })
-        controller.load(text: document.text)
+        if let lineStarts = progressiveLoads.removeValue(forKey: document.id) {
+            let banner = document.fileURL.flatMap { openingURLs[$0] }
+            controller.loadProgressively(text: document.text, lineStarts: lineStarts) { fraction in
+                banner?.setProgress(0.5 + 0.5 * fraction)
+            }
+        } else {
+            controller.load(text: document.text)
+        }
         controller.onTextChange = { [weak self, weak document, weak controller] text in
             guard let document else { return }
             document.text = text
@@ -434,7 +446,7 @@ public final class MainWindowController: NSWindowController {
         performClose(index: index)
     }
 
-    private func performClose(index: Int) {
+    func performClose(index: Int) {
         guard documents.indices.contains(index) else { return }
         let document = tabs.remove(at: index).document
         // Drop only the editors for panes this document no longer occupies;
@@ -753,7 +765,7 @@ public final class MainWindowController: NSWindowController {
     /// Opens `url` the way the Open command does and calls back once the text
     /// is on screen. The benchmark times this call, not the pieces under it.
     public func openForBenchmark(url: URL, completion: @escaping @MainActor (Bool) -> Void) {
-        completion(openOrFocus(url: url))
+        openOrFocusAsync(url: url, completion: completion)
     }
 
     // MARK: - Menu actions
@@ -766,11 +778,13 @@ public final class MainWindowController: NSWindowController {
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK else { return }
         for url in panel.urls {
-            guard let document = try? TextDocument.load(contentsOf: url) else { continue }
-            tabs.append(EditorTab(document: document))
+            openOrFocusAsync(url: url) { [weak self] opened in
+                if !opened {
+                    self?.presentError("Could not open \(url.lastPathComponent)",
+                                       detail: "The file may be unreadable or not valid text.")
+                }
+            }
         }
-        activate(index: tabs.count - 1)
-        refreshTabs()
     }
 
     @objc public func saveDocumentAction(_ sender: Any?) {

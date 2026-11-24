@@ -40,20 +40,23 @@ extension MainWindowController {
     @objc public func openRecentAction(_ sender: Any?) {
         guard let item = sender as? NSMenuItem, let path = item.representedObject as? String else { return }
         let url = URL(fileURLWithPath: path)
-        guard openOrFocus(url: url) else {
-            // A stale entry is dropped rather than left to fail again.
-            recentFiles?.remove(path)
-            rebuildRecentMenu()
-            presentError("Could not open \((path as NSString).lastPathComponent)",
-                         detail: "The file may have been moved or deleted.")
-            return
+        openOrFocusAsync(url: url) { [weak self] opened in
+            guard let self else { return }
+            guard opened else {
+                // A stale entry is dropped rather than left to fail again.
+                self.recentFiles?.remove(path)
+                self.rebuildRecentMenu()
+                self.presentError("Could not open \((path as NSString).lastPathComponent)",
+                                  detail: "The file may have been moved or deleted.")
+                return
+            }
+            self.noteRecentlyOpened(url)
         }
-        noteRecentlyOpened(url)
     }
 
     @objc public func openAllRecentAction(_ sender: Any?) {
         for path in recentFiles?.paths ?? [] {
-            openOrFocus(url: URL(fileURLWithPath: path))
+            openOrFocusAsync(url: URL(fileURLWithPath: path))
         }
     }
 

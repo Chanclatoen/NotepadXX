@@ -462,6 +462,113 @@ public final class EditorViewController: NSViewController {
         updateGutterWidth()
     }
 
+    // MARK: - Loading a large document in slices
+
+    /// True from `loadProgressively` until its last slice is in the view.
+    public private(set) var isLoadingText = false
+    private var loadGeneration = 0
+    private var loadWaiters: [(Bool) -> Void] = []
+
+    /// Longest slice, in bytes, the view takes in one main-thread turn.
+    ///
+    /// The text view builds its line index while it takes text, and doing that
+    /// for a 100 MB document at once holds the main thread for about half a
+    /// second. Feeding it in slices keeps each turn short, so the window
+    /// keeps drawing and the progress bar keeps moving while the text arrives.
+    public static var loadSliceBytes = 4 * 1_048_576
+
+    /// Same result as `load(text:)`, but the view receives the text in slices
+    /// with the main run loop turning in between. The view is read-only until
+    /// the last slice is in. `lineStarts`, when given, must be
+    /// `SyntaxHighlighter.computeLineStarts(text)` computed off the main thread.
+    public func loadProgressively(
+        text: String,
+        lineStarts: [Int]? = nil,
+        progress: ((Double) -> Void)? = nil,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        loadViewIfNeeded()
+        if textView.frame.width == 0 {
+            textView.frame = NSRect(origin: .zero, size: scrollView.contentSize)
+        }
+        loadGeneration += 1
+        let generation = loadGeneration
+        if let completion { loadWaiters.append(completion) }
+        isLoadingText = true
+        let wasEditable = textView.isEditable
+        textView.isEditable = false
+
+        var source = text
+        source.makeContiguousUTF8()
+        let utf8 = source.utf8
+        let total = utf8.count
+        var position = utf8.startIndex
+
+        /// The next slice: about `loadSliceBytes`, extended to the end of its line.
+        func nextSlice() -> String {
+            let target = utf8.index(position, offsetBy: min(Self.loadSliceBytes, utf8.distance(from: position, to: utf8.endIndex)))
+            var end = target
+            if end < utf8.endIndex, let newline = utf8[end...].firstIndex(of: 10) {
+                end = utf8.index(after: newline)
+            } else {
+                end = utf8.endIndex
+            }
+            defer { position = end }
+            return String(source[position..<end])
+        }
+
+        func finish(_ success: Bool) {
+            isLoadingText = false
+            textView.isEditable = wasEditable
+            if success {
+                highlighter?.setText(source, lineStarts: lineStarts)
+                highlightVisibleRegion()
+                refreshFoldMarkers()
+                updateGutterWidth()
+            }
+            let waiters = loadWaiters
+            loadWaiters = []
+            waiters.forEach { $0(success) }
+        }
+
+        textView.setText(nextSlice())
+        func step() {
+            guard generation == loadGeneration else { return }   // cancelled or superseded
+            guard position < utf8.endIndex, let storage = textView.textStorage else {
+                progress?(1)
+                return finish(true)
+            }
+            let slice = nextSlice()
+            let start = storage.length
+            storage.replaceCharacters(in: NSRange(location: start, length: 0), with: slice)
+            storage.addAttributes(
+                textView.typingAttributes,
+                range: NSRange(location: start, length: storage.length - start)
+            )
+            progress?(Double(utf8.distance(from: utf8.startIndex, to: position)) / Double(max(total, 1)))
+            DispatchQueue.main.async { step() }
+        }
+        DispatchQueue.main.async { step() }
+    }
+
+    /// Stops a `loadProgressively` that is still running. The view keeps what
+    /// it has so far; the owner is expected to discard it.
+    public func cancelLoading() {
+        guard isLoadingText else { return }
+        loadGeneration += 1
+        isLoadingText = false
+        textView.isEditable = true
+        let waiters = loadWaiters
+        loadWaiters = []
+        waiters.forEach { $0(false) }
+    }
+
+    /// Calls `body` when the slices are all in (true) or loading was
+    /// cancelled (false); immediately when nothing is loading.
+    public func whenLoaded(_ body: @escaping (Bool) -> Void) {
+        if isLoadingText { loadWaiters.append(body) } else { body(true) }
+    }
+
     /// Sets the language and re-highlights. Passing nil clears highlighting.
     public func setLanguage(_ language: LanguageDefinition?) {
         self.language = language
