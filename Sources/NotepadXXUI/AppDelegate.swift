@@ -172,8 +172,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // --benchmark <file> measures the numbers quoted in the README.
         if let path = options.benchmarkPath {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                Benchmark.run(path: path, controller: self.windowController)
-                NSApp.terminate(nil)
+                Benchmark.run(path: path, controller: self.windowController) { NSApp.terminate(nil) }
             }
             return
         }

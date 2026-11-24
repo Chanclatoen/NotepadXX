@@ -750,6 +750,12 @@ public final class MainWindowController: NSWindowController {
         return true
     }
 
+    /// Opens `url` the way the Open command does and calls back once the text
+    /// is on screen. The benchmark times this call, not the pieces under it.
+    public func openForBenchmark(url: URL, completion: @escaping @MainActor (Bool) -> Void) {
+        completion(openOrFocus(url: url))
+    }
+
     // MARK: - Menu actions
 
     @objc public func newDocumentAction(_ sender: Any?) { newDocument() }
