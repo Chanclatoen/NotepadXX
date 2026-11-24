@@ -167,6 +167,9 @@ public final class SessionStore {
             )
             let lineEnding = LineEnding(rawValue: entry.lineEndingRawValue) ?? .platformDefault
             let fileURL = entry.filePath.map { URL(fileURLWithPath: $0) }
+            // Snapshot-only restores never go through TextDocument.load, yet a
+            // later save of the file still needs the sandbox grant.
+            if let fileURL { BookmarkStore.shared?.access(fileURL.path) }
 
             var text: String?
             if let name = entry.backupFileName {
@@ -185,7 +188,11 @@ public final class SessionStore {
                 encoding: encoding,
                 lineEnding: lineEnding,
                 isDirty: entry.isDirty,
-                isReadOnly: entry.isReadOnly
+                isReadOnly: entry.isReadOnly,
+                // Without it a restored file is never checked for outside changes.
+                lastKnownModification: fileURL.flatMap {
+                    (try? fileManager.attributesOfItem(atPath: $0.path))?[.modificationDate] as? Date
+                }
             )
             document.untitledName = entry.untitledName
             document.languageName = entry.languageName

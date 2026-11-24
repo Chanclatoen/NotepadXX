@@ -62,6 +62,21 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertFalse(documents[0].isDirty)
     }
 
+    /// A restored file must still be watched for changes made by other programs.
+    func testRestoredFileNoticesAnOutsideChange() throws {
+        let (store, dir) = try makeStore()
+        let fileURL = dir.appendingPathComponent("watched.txt")
+        try Data("original".utf8).write(to: fileURL)
+        try store.save(documents: [try TextDocument.load(contentsOf: fileURL)], activeIndex: 0)
+
+        let restored = try SessionStore(directory: dir).restoreDocuments().documents[0]
+        XCTAssertFalse(restored.hasChangedOnDisk())
+        try Data("other program".utf8).write(to: fileURL)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(5)],
+                                              ofItemAtPath: fileURL.path)
+        XCTAssertTrue(restored.hasChangedOnDisk())
+    }
+
     func testSnapshotsArePrunedOnceDocumentIsSaved() throws {
         let (store, dir) = try makeStore()
         let backups = dir.appendingPathComponent("backups")
