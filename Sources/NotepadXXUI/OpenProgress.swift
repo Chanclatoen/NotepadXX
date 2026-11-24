@@ -145,6 +145,11 @@ extension MainWindowController {
         banner: OpenProgressView, token: OpenToken,
         completion: @escaping @MainActor (Bool) -> Void
     ) {
+        // Cancel pressed after the read ended but before this ran.
+        if token.isCancelled {
+            banner.removeFromSuperview()
+            return completion(false)
+        }
         // Another route may have opened the same file while this one read it.
         if let index = indexOfDocument(for: url) {
             banner.removeFromSuperview()

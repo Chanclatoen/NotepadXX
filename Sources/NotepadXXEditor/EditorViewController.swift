@@ -468,6 +468,8 @@ public final class EditorViewController: NSViewController {
     public private(set) var isLoadingText = false
     private var loadGeneration = 0
     private var loadWaiters: [(Bool) -> Void] = []
+    /// What `isEditable` was when loading began, restored when it ends.
+    private var editableBeforeLoad = true
 
     /// Longest slice, in bytes, the view takes in one main-thread turn.
     ///
@@ -499,7 +501,7 @@ public final class EditorViewController: NSViewController {
         let generation = loadGeneration
         if let completion { loadWaiters.append(completion) }
         isLoadingText = true
-        let wasEditable = textView.isEditable
+        editableBeforeLoad = textView.isEditable
         textView.isEditable = false
 
         var source = text
@@ -523,7 +525,7 @@ public final class EditorViewController: NSViewController {
 
         func finish(_ success: Bool) {
             isLoadingText = false
-            textView.isEditable = wasEditable
+            textView.isEditable = editableBeforeLoad
             if success {
                 highlighter?.setText(source, lineStarts: lineStarts)
                 highlightVisibleRegion()
@@ -561,7 +563,7 @@ public final class EditorViewController: NSViewController {
         guard isLoadingText else { return }
         loadGeneration += 1
         isLoadingText = false
-        textView.isEditable = true
+        textView.isEditable = editableBeforeLoad
         let waiters = loadWaiters
         loadWaiters = []
         waiters.forEach { $0(false) }

@@ -331,6 +331,9 @@ public final class MainWindowController: NSWindowController {
         controller.loadViewIfNeeded()
         if document.languageName == nil { autoDetectLanguage(for: document) }
         controller.setLanguage(document.languageName.flatMap { LanguageRegistry.shared.language(named: $0) })
+        // A view-only document (including a file over the size limit) must
+        // not accept keystrokes, whichever way its text arrives.
+        controller.isEditable = !document.isReadOnly
         if let lineStarts = progressiveLoads.removeValue(forKey: document.id) {
             let banner = document.fileURL.flatMap { openingURLs[$0] }
             controller.loadProgressively(text: document.text, lineStarts: lineStarts) { fraction in
