@@ -986,7 +986,12 @@ public final class EditorViewController: NSViewController {
         textView.setText(newText)
         let clamped = min(caret, (newText as NSString).length)
         selectedRange = NSRange(location: clamped, length: 0)
-        if changed { notifyTextChanged() }
+        if changed {
+            // The new text has its own token boundaries; colours from the old text would stay put.
+            highlighter?.setText(newText)
+            highlightVisibleRegion()
+            notifyTextChanged()
+        }
     }
 
     /// Replaces just the selected range.

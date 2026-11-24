@@ -184,4 +184,18 @@ final class CommandsMenuTests: XCTestCase {
         document.lineEnding = .crlf
         XCTAssertEqual(controller.printableText(for: document), "a\nb\n")
     }
+
+    /// Colours follow the text after a whole-buffer command: the comment marker
+    /// and the words behind it are one comment, not the old tokens shifted.
+    func testCommentedLinesAreColouredAsAComment() throws {
+        let (controller, _) = makeController("let a = 1\n", language: "Swift")
+        let editor = try XCTUnwrap(controller.currentEditor)
+        controller.toggleLineCommentAction(nil)
+        let storage = try XCTUnwrap(editor.textView.textStorage)
+        func colour(at index: Int) -> NSColor? { storage.attribute(.foregroundColor, at: index, effectiveRange: nil) as? NSColor }
+        XCTAssertEqual(editor.text, "// let a = 1\n")
+        XCTAssertNotNil(colour(at: 0))
+        XCTAssertEqual(colour(at: 0), colour(at: 4), "`let` inside the comment keeps the comment colour")
+        XCTAssertEqual(colour(at: 0), colour(at: 10))
+    }
 }
