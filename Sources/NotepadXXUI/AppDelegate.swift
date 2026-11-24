@@ -8,6 +8,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: MainWindowController!
     private var sessionStore: SessionStore?
     private var autosaveTimer: Timer?
+    /// Files the system hands over before launch has built the window (Open
+    /// With, or a double-click, on a cold start).
+    private var urlsOpenedDuringLaunch: [URL] = []
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenu.build()
@@ -67,6 +70,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // A large file still being read counts as opened: a blank tab beside
         // it would only be in the way.
         if !windowController.openingURLs.isEmpty { openedFromCommandLine = true }
+        for url in urlsOpenedDuringLaunch {
+            windowController.openOrFocusAsync(url: url)
+            openedFromCommandLine = true
+        }
+        urlsOpenedDuringLaunch = []
 
         if documents.isEmpty && !openedFromCommandLine {
             windowController.newDocument()
@@ -268,6 +276,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     public func application(_ application: NSApplication, open urls: [URL]) {
+        guard windowController != nil else { return urlsOpenedDuringLaunch.append(contentsOf: urls) }
         for url in urls {
             windowController.openOrFocusAsync(url: url)
         }
