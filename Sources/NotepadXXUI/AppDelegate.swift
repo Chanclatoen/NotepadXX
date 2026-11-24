@@ -126,6 +126,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             try? "changed by another program\n".write(to: url, atomically: true, encoding: .utf8)
             try? FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(5)],
                                                    ofItemAtPath: url.path)
+            // Silent reload, because a prompt is a sheet and the capture does not include sheets.
+            try? windowController.preferencesStore?.update { $0.reloadChangedFilesSilently = true }
             windowController.checkForExternalChanges()
         }
         if ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "carets" {
