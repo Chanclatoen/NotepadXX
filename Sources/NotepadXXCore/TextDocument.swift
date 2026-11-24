@@ -17,7 +17,10 @@ public final class TextDocument: Identifiable, @unchecked Sendable {
     public var text: String {
         get {
             if liveIsStale, let liveSource {
+                // The source reads the editor's NSTextStorage, which is main-thread only.
+                assert(Thread.isMainThread, "TextDocument.text read off the main thread while the editor is ahead")
                 liveIsStale = false
+                self.liveSource = nil
                 storedText = liveSource()
             }
             return storedText

@@ -349,8 +349,11 @@ public final class MainWindowController: NSWindowController {
         }
         controller.onEdit = { [weak self, weak document, weak controller] in
             guard let self, let document, let controller else { return }
-            // The document pulls the text from the editor when something reads it.
-            document.noteEdited { [weak controller] in controller?.text ?? "" }
+            // The document pulls the text from the editor when something reads it. The
+            // editor is held strongly until then, so closing its pane or tab cannot
+            // lose an edit that has not been read yet; the document drops it after the
+            // pull, and the editor only holds the document weakly, so there is no cycle.
+            document.noteEdited { controller.text }
             // A clone in the other pane shows the same document, so it has to
             // show the same text. Only read when there is a clone to update.
             self.syncClones(of: document, from: controller)

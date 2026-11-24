@@ -981,10 +981,12 @@ public final class EditorViewController: NSViewController {
     /// Replaces the whole buffer, preserving the caret position where possible.
     public func replaceAll(with newText: String) {
         let caret = selectedRange.location
+        // A command that leaves the text as it was (sorting sorted lines) is not an edit.
+        let changed = textView.string != newText
         textView.setText(newText)
         let clamped = min(caret, (newText as NSString).length)
         selectedRange = NSRange(location: clamped, length: 0)
-        notifyTextChanged()
+        if changed { notifyTextChanged() }
     }
 
     /// Replaces just the selected range.
@@ -1005,6 +1007,10 @@ public final class EditorViewController: NSViewController {
     /// user is still working with the same text.
     public func replaceSelectionKeepingSelection(with replacement: String) {
         let selection = selectedRange
+        let whole = NSRange(location: 0, length: contents.length)
+        // Same text under the selection (UPPERCASE on capitals): not an edit, and
+        // replacing it would still report one.
+        if contents.substring(with: NSIntersectionRange(selection, whole)) == replacement { return }
         textView.replaceCharacters(in: selection, with: replacement)
         selectedRange = NSRange(location: selection.location,
                                 length: (replacement as NSString).length)

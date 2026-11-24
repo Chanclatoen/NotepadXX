@@ -111,4 +111,101 @@ final class LazyTextAndBackgroundSaveTests: XCTestCase {
         XCTAssertNotNil(controller.lastReportedError)
         XCTAssertTrue(document.isDirty)
     }
+
+    // MARK: - An edit is never lost with the pane it was typed in
+
+    private func split(_ text: String) -> (MainWindowController, TextDocument) {
+        let controller = MainWindowController()
+        let document = TextDocument(text: text)
+        controller.adopt(documents: [document], activeIndex: 0)
+        controller.window?.setContentSize(NSSize(width: 1200, height: 700))
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        controller.cloneToOtherViewAction(nil)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        return (controller, document)
+    }
+
+    func testAnEditSurvivesClosingTheClone() throws {
+        let (controller, document) = split("one\ntwo\n")
+        let primary = controller.editorController(for: document, inPane: 0)
+        primary.selectedRange = NSRange(location: 0, length: 0)
+        primary.replaceSelection(with: "typed ")
+        // The edit has not been read yet; now the clone's tab goes away.
+        let cloneIndex = try XCTUnwrap(controller.tabs.lastIndex { $0.pane == 1 })
+        controller.performClose(index: cloneIndex)
+        XCTAssertEqual(document.text, "typed one\ntwo\n")
+    }
+
+    func testAnEditSurvivesClosingTheSplit() {
+        let (controller, document) = split("one\ntwo\n")
+        let primary = controller.editorController(for: document, inPane: 0)
+        primary.selectedRange = NSRange(location: 0, length: 0)
+        primary.replaceSelection(with: "typed ")
+        controller.closeSplitAction(nil)
+        XCTAssertEqual(document.text, "typed one\ntwo\n")
+    }
+
+    func testAnEditSurvivesMovingToTheOtherView() {
+        let controller = MainWindowController()
+        let document = TextDocument(text: "one\n")
+        controller.adopt(documents: [document], activeIndex: 0)
+        _ = controller.window
+        controller.currentEditor?.selectedRange = NSRange(location: 0, length: 0)
+        controller.currentEditor?.replaceSelection(with: "typed ")
+        controller.moveToOtherViewAction(nil)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        XCTAssertEqual(document.text, "typed one\n")
+    }
+
+    // MARK: - Unchanged text is not an edit
+
+    func testSortingSortedLinesLeavesTheDocumentClean() {
+        let controller = MainWindowController()
+        let document = TextDocument(text: "a\nb\nc\n")
+        controller.adopt(documents: [document], activeIndex: 0)
+        _ = controller.window
+        controller.sortLinesAscendingAction(nil)
+        XCTAssertFalse(document.isDirty, "nothing changed, so nothing to save")
+        controller.sortLinesDescendingAction(nil)
+        XCTAssertTrue(document.isDirty)
+        XCTAssertEqual(document.text, "c\nb\na\n")
+    }
+
+    func testUppercasingUppercaseTextLeavesTheDocumentClean() {
+        let controller = MainWindowController()
+        let document = TextDocument(text: "ABC\n")
+        controller.adopt(documents: [document], activeIndex: 0)
+        _ = controller.window
+        controller.currentEditor?.selectedRange = NSRange(location: 0, length: 3)
+        controller.convertUpperCaseAction(nil)
+        XCTAssertFalse(document.isDirty)
+    }
+
+    // MARK: - The snapshot is independent of the live editor
+
+    func testTypingWhileABackgroundSaveRunsDoesNotReachTheFile() throws {
+        let url = tempURL("typing.txt")
+        let original = String(repeating: "line of text\n", count: 400)
+        try "x\n".write(to: url, atomically: true, encoding: .utf8)
+        let saved = MainWindowController.backgroundSaveThreshold
+        MainWindowController.backgroundSaveThreshold = 10
+        defer { MainWindowController.backgroundSaveThreshold = saved }
+
+        let controller = MainWindowController()
+        let document = TextDocument(fileURL: url, text: "x\n")
+        controller.adopt(documents: [document], activeIndex: 0)
+        _ = controller.window
+        controller.currentEditor?.replaceAll(with: original)
+
+        let done = expectation(description: "saved")
+        controller.saveActiveDocument { done.fulfill() }
+        // Typing before the write finishes: the main thread is free, the file must keep the snapshot.
+        controller.currentEditor?.selectedRange = NSRange(location: 0, length: 0)
+        controller.currentEditor?.replaceSelection(with: "TYPED DURING SAVE ")
+        wait(for: [done], timeout: 10)
+
+        XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), original)
+        XCTAssertTrue(document.isDirty, "the typed text is not on disk")
+        XCTAssertTrue(document.text.hasPrefix("TYPED DURING SAVE "))
+    }
 }
