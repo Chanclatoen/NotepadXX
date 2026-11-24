@@ -476,6 +476,10 @@ public final class EditorViewController: NSViewController {
     /// second. Feeding it in slices keeps each turn short, so the window
     /// keeps drawing and the progress bar keeps moving while the text arrives.
     public static var loadSliceBytes = 4 * 1_048_576
+    /// The first slice goes in through the view's bulk path, which is about
+    /// four times cheaper per line than appending, so it can be much larger
+    /// and still fit in a turn.
+    public static var initialLoadSliceBytes = 32 * 1_048_576
 
     /// Same result as `load(text:)`, but the view receives the text in slices
     /// with the main run loop turning in between. The view is read-only until
@@ -505,8 +509,8 @@ public final class EditorViewController: NSViewController {
         var position = utf8.startIndex
 
         /// The next slice: about `loadSliceBytes`, extended to the end of its line.
-        func nextSlice() -> String {
-            let target = utf8.index(position, offsetBy: min(Self.loadSliceBytes, utf8.distance(from: position, to: utf8.endIndex)))
+        func nextSlice(length: Int = Self.loadSliceBytes) -> String {
+            let target = utf8.index(position, offsetBy: min(length, utf8.distance(from: position, to: utf8.endIndex)))
             var end = target
             if end < utf8.endIndex, let newline = utf8[end...].firstIndex(of: 10) {
                 end = utf8.index(after: newline)
@@ -531,7 +535,7 @@ public final class EditorViewController: NSViewController {
             waiters.forEach { $0(success) }
         }
 
-        textView.setText(nextSlice())
+        textView.setText(nextSlice(length: Self.initialLoadSliceBytes))
         func step() {
             guard generation == loadGeneration else { return }   // cancelled or superseded
             guard position < utf8.endIndex, let storage = textView.textStorage else {
