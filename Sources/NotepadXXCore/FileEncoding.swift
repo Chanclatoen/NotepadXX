@@ -68,7 +68,19 @@ public enum EncodingDetector {
 
     /// Encodes `string` as `encoding`, prefixing a BOM when the encoding wants one.
     public static func encode(string: String, as encoding: FileEncoding) -> Data? {
-        guard let body = string.data(using: encoding.encoding) else { return nil }
-        return Data(encoding.bomBytes) + body
+        let body: Data
+        if encoding.encoding == .utf8 {
+            // Every Swift string is valid UTF-8, so this is a straight copy of
+            // the bytes rather than a conversion pass.
+            var contiguous = string
+            contiguous.makeContiguousUTF8()
+            body = Data(contiguous.utf8)
+        } else if let converted = string.data(using: encoding.encoding) {
+            body = converted
+        } else {
+            return nil
+        }
+        let bom = encoding.bomBytes
+        return bom.isEmpty ? body : Data(bom) + body
     }
 }
