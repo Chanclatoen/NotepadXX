@@ -8,16 +8,47 @@ public final class TextDocument: Identifiable, @unchecked Sendable {
     public private(set) var fileURL: URL?
     /// The document's text.
     ///
-    /// The dirty check is deliberately cheap. This is assigned on every
-    /// keystroke, and comparing two copies of a large document character by
-    /// character each time is enough to make typing in one unusable: once the
-    /// document is already dirty there is nothing to decide, and a differing
-    /// length settles it without looking at the contents.
+    /// While an editor shows the document, the editor holds the live text and
+    /// this is pulled from it on demand (`noteEdited`): copying a 100 MB buffer
+    /// on every keystroke cost 0.4 s per edit. The dirty check on assignment is
+    /// deliberately cheap: once the document is already dirty there is nothing
+    /// to decide, and a differing length settles it without looking at the
+    /// contents.
     public var text: String {
-        didSet {
-            guard !isDirty else { return }
-            if text.utf8.count != oldValue.utf8.count || text != oldValue { isDirty = true }
+        get {
+            if liveIsStale, let liveSource {
+                liveIsStale = false
+                storedText = liveSource()
+            }
+            return storedText
         }
+        set {
+            editGeneration &+= 1
+            if liveIsStale {
+                // The editor's newer text is being replaced; the edit made it dirty already.
+                liveIsStale = false
+                isDirty = true
+            } else if !isDirty,
+                      newValue.utf8.count != storedText.utf8.count || newValue != storedText {
+                isDirty = true
+            }
+            storedText = newValue
+        }
+    }
+    private var storedText: String
+    private var liveSource: (() -> String)?
+    private var liveIsStale = false
+    /// Bumped by every change to the text; an async save only clears the dirty
+    /// flag if nothing changed while it was writing.
+    public private(set) var editGeneration = 0
+
+    /// The editor changed its buffer. Marks the document dirty without reading
+    /// the text; `source` is called the next time `text` is read.
+    public func noteEdited(liveText source: @escaping () -> String) {
+        liveSource = source
+        liveIsStale = true
+        editGeneration &+= 1
+        isDirty = true
     }
     public var encoding: FileEncoding
     public var lineEnding: LineEnding
@@ -44,7 +75,7 @@ public final class TextDocument: Identifiable, @unchecked Sendable {
     ) {
         self.id = id
         self.fileURL = fileURL
-        self.text = text
+        self.storedText = text
         self.encoding = encoding
         self.lineEnding = lineEnding
         self.isDirty = isDirty
@@ -163,18 +194,44 @@ public final class TextDocument: Identifiable, @unchecked Sendable {
 
     /// Writes to `url` (or the document's own URL), re-applying `lineEnding`.
     public func save(to url: URL? = nil) throws {
-        guard let destination = url ?? fileURL else { throw SaveError.noDestination }
-        let output = LineEnding.normalize(text, to: lineEnding)
-        guard let data = EncodingDetector.encode(string: output, as: encoding) else {
-            throw SaveError.unencodable(encoding.displayName)
-        }
-        do { try data.write(to: destination, options: .atomic) }
-        catch { throw SaveError.unwritable(error.localizedDescription) }
+        let snapshot = try makeSaveSnapshot(to: url)
+        try SaveSnapshot.write(snapshot)
+        finishSave(snapshot)
+    }
 
-        fileURL = destination
-        isDirty = false
-        BookmarkStore.shared?.remember(destination)
-        let attributes = try? FileManager.default.attributesOfItem(atPath: destination.path)
+    /// Everything a save needs, as plain values, so the encode and write can run
+    /// off the main thread while the document stays editable.
+    public struct SaveSnapshot: Sendable {
+        let text: String
+        let lineEnding: LineEnding
+        let encoding: FileEncoding
+        public let destination: URL
+        let generation: Int
+
+        /// Normalises, encodes and writes atomically. Touches no document state.
+        public static func write(_ snapshot: SaveSnapshot) throws {
+            let output = LineEnding.normalize(snapshot.text, to: snapshot.lineEnding)
+            guard let data = EncodingDetector.encode(string: output, as: snapshot.encoding) else {
+                throw SaveError.unencodable(snapshot.encoding.displayName)
+            }
+            do { try data.write(to: snapshot.destination, options: .atomic) }
+            catch { throw SaveError.unwritable(error.localizedDescription) }
+        }
+    }
+
+    public func makeSaveSnapshot(to url: URL? = nil) throws -> SaveSnapshot {
+        guard let destination = url ?? fileURL else { throw SaveError.noDestination }
+        return SaveSnapshot(text: text, lineEnding: lineEnding, encoding: encoding,
+                            destination: destination, generation: editGeneration)
+    }
+
+    /// Bookkeeping after a successful write. An edit made while the write was
+    /// in flight keeps the document dirty.
+    public func finishSave(_ snapshot: SaveSnapshot) {
+        fileURL = snapshot.destination
+        if editGeneration == snapshot.generation { isDirty = false }
+        BookmarkStore.shared?.remember(snapshot.destination)
+        let attributes = try? FileManager.default.attributesOfItem(atPath: snapshot.destination.path)
         lastKnownModification = attributes?[.modificationDate] as? Date
     }
 

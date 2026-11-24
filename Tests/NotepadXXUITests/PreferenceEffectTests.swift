@@ -14,13 +14,13 @@ final class PreferenceEffectTests: XCTestCase {
     /// the user's own settings.
     private var savedPreferences: Preferences?
 
-    override func tearDown() {
+    override func tearDown() async throws {
         if let savedPreferences,
            let store = try? PreferencesStore(directory: try SessionStore.defaultDirectory()) {
             try? store.update { $0 = savedPreferences }
         }
         savedPreferences = nil
-        super.tearDown()
+        try await super.tearDown()
     }
 
     private func store(of controller: MainWindowController) throws -> PreferencesStore {

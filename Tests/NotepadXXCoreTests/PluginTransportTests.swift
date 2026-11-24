@@ -41,7 +41,7 @@ final class PluginTransportTests: XCTestCase {
     /// than downloading and trusting a checksum that came with it.
     @MainActor
     func testInstallRefusesAPlainHTTPDownload() async throws {
-        let repository = try PluginRepository(directory: try directory())
+        let repository = PluginRepository(directory: try directory())
         let listing = PluginListing(
             identifier: "test.plugin", name: "Test", version: "1.0.0",
             description: "", downloadURL: "http://example.com/plugin.zip",

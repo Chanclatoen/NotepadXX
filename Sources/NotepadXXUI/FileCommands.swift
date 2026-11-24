@@ -206,7 +206,14 @@ extension MainWindowController {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = document.displayName
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        // A copy must not retarget the open document.
+        writeCopy(of: document, to: url)
+    }
+
+    /// Writes the document to `url` as a new file and leaves the document itself
+    /// (path, dirty flag, tab) as it was.
+    func writeCopy(of document: TextDocument, to url: URL) {
+        // A folded region is absent from the buffer, so open every fold first.
+        unfoldAll()
         let copy = TextDocument(
             fileURL: nil, text: document.text,
             encoding: document.encoding, lineEnding: document.lineEnding
@@ -217,10 +224,16 @@ extension MainWindowController {
 
     // MARK: - Printing
 
+    /// What gets printed: the whole document, folds open, as plain LF text.
+    func printableText(for document: TextDocument) -> String {
+        unfoldAll()
+        return LineEnding.normalize(document.text, to: .lf)
+    }
+
     @objc public func printDocumentAction(_ sender: Any?) {
         guard let document = activeDocument else { return }
         let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        textView.string = LineEnding.normalize(document.text, to: .lf)
+        textView.string = printableText(for: document)
         textView.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
 
         let info = NSPrintInfo.shared

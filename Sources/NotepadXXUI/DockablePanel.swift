@@ -1,4 +1,5 @@
 import AppKit
+import NotepadXXCore
 import NotepadXXDesign
 
 /// Where a panel docks. Notepad++ allows left/right/bottom docking plus
@@ -209,7 +210,7 @@ public final class DockHostView: NSView {
     /// Moves a panel to another dock, keeping it visible.
     public func move(_ identifier: String, to position: DockPosition) {
         acceptsSaves = true
-        guard let panel = panels[identifier] else { return }
+        guard panels[identifier] != nil else { return }
         let wasVisible = visibleIdentifiers.contains(identifier)
         if wasVisible { hide(identifier) }
         dockPositions[identifier] = position
@@ -326,7 +327,7 @@ public final class DockHostView: NSView {
             layout.floatingFrames[identifier] = NSStringFromRect(window.frame)
         }
         guard let data = try? JSONEncoder().encode(layout) else { return }
-        UserDefaults.standard.set(data, forKey: storageKey)
+        AppDefaults.store.set(data, forKey: storageKey)
     }
 
     public func restoreLayout() {
@@ -340,8 +341,8 @@ public final class DockHostView: NSView {
 
         // Fall back to the shared layout the first time a workspace is opened,
         // so a new project starts from the arrangement already in use.
-        let data = UserDefaults.standard.data(forKey: storageKey)
-            ?? UserDefaults.standard.data(forKey: defaultsKey)
+        let data = AppDefaults.store.data(forKey: storageKey)
+            ?? AppDefaults.store.data(forKey: defaultsKey)
         guard let data,
               let layout = try? JSONDecoder().decode(Layout.self, from: data) else {
             isRestoring = false
@@ -368,7 +369,7 @@ public final class DockHostView: NSView {
     /// Layouts written before positions and sizes were saved were a plain
     /// array of identifiers.
     private func restoreLegacyLayout() {
-        guard let saved = UserDefaults.standard.array(forKey: defaultsKey) as? [String] else { return }
+        guard let saved = AppDefaults.store.array(forKey: defaultsKey) as? [String] else { return }
         for identifier in saved { show(identifier) }
     }
 

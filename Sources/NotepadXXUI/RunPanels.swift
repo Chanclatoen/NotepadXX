@@ -28,7 +28,7 @@ public final class RunPanelController: NSWindowController {
         panel.title = "Run"
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
-        panel.setFrameAutosaveName("NotepadXX.RunPanel")
+        if !AppDefaults.isIsolated { panel.setFrameAutosaveName("NotepadXX.RunPanel") }
         super.init(window: panel)
         buildLayout()
     }
@@ -145,7 +145,7 @@ public final class RunMacroPanelController: NSWindowController {
         panel.title = "Run a Macro Multiple Times"
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
-        panel.setFrameAutosaveName("NotepadXX.RunMacroPanel")
+        if !AppDefaults.isIsolated { panel.setFrameAutosaveName("NotepadXX.RunMacroPanel") }
         super.init(window: panel)
         buildLayout()
     }

@@ -9,16 +9,16 @@ import AppKit
 final class PreferencesWindowTests: XCTestCase {
     private var directory: URL!
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
+    override func setUp() async throws {
+        try await super.setUp()
         directory = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("npxx-prefswin-\(ProcessInfo.processInfo.globallyUniqueString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
-    override func tearDownWithError() throws {
+    override func tearDown() async throws {
         try? FileManager.default.removeItem(at: directory)
-        try super.tearDownWithError()
+        try await super.tearDown()
     }
 
     private func makeController() throws -> (PreferencesWindowController, PreferencesStore) {

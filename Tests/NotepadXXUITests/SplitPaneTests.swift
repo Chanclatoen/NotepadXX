@@ -50,7 +50,7 @@ final class SplitPaneTests: XCTestCase {
         XCTAssertFalse(primary === secondary, "each pane has its own editor")
 
         primary.replaceAll(with: "edited in the first pane")
-        primary.onTextChange?(primary.text)
+        primary.onEdit?()
 
         XCTAssertEqual(secondary.text, "edited in the first pane")
     }

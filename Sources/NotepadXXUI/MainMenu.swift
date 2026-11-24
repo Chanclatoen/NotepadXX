@@ -8,8 +8,8 @@ import NotepadXXCore
 ///
 /// Items are nil-targeted so they travel the responder chain and land on the
 /// key window's controller, which is what keeps them enabled/disabled correctly.
+@MainActor
 public enum MainMenu {
-    @MainActor
     public static func build() -> NSMenu {
         let root = NSMenu()
         root.addItem(applicationMenu())
@@ -99,6 +99,11 @@ public enum MainMenu {
             add(menu, "Save As…", #selector(MainWindowController.saveDocumentAsAction(_:)), "s", [.command, .shift])
             add(menu, "Save All", #selector(MainWindowController.saveAllAction(_:)), "s", [.command, .option])
             menu.addItem(.separator())
+            add(menu, "Save a Copy As…", #selector(MainWindowController.saveACopyAsAction(_:)))
+            add(menu, "Reload from Disk", #selector(MainWindowController.reloadFromDiskAction(_:)), "r", [.command, .option])
+            menu.addItem(.separator())
+            add(menu, "Print…", #selector(MainWindowController.printDocumentAction(_:)), "p")
+            menu.addItem(.separator())
             add(menu, "Close Tab", #selector(MainWindowController.closeTabAction(_:)), "w")
         }
     }
@@ -121,6 +126,7 @@ public enum MainMenu {
                 add(sub, "Move Up Current Line", #selector(MainWindowController.moveLinesUpAction(_:)))
                 add(sub, "Move Down Current Line", #selector(MainWindowController.moveLinesDownAction(_:)))
                 add(sub, "Join Lines", #selector(MainWindowController.joinLinesAction(_:)))
+                add(sub, "Split Lines", #selector(MainWindowController.splitLinesAction(_:)))
                 sub.addItem(.separator())
                 add(sub, "Remove Consecutive Duplicate Lines", #selector(MainWindowController.removeConsecutiveDuplicatesAction(_:)))
                 add(sub, "Remove Duplicate Lines", #selector(MainWindowController.removeAllDuplicatesAction(_:)))
@@ -132,6 +138,16 @@ public enum MainMenu {
                 add(sub, "Reverse Line Order", #selector(MainWindowController.reverseLineOrderAction(_:)))
                 add(sub, "Randomize Line Order", #selector(MainWindowController.randomizeLineOrderAction(_:)))
             })
+
+            menu.addItem(submenu("Comment/Uncomment") { sub in
+                add(sub, "Toggle Line Comment", #selector(MainWindowController.toggleLineCommentAction(_:)), "/")
+                add(sub, "Toggle Block Comment", #selector(MainWindowController.toggleBlockCommentAction(_:)),
+                    "/", [.command, .option])
+            })
+            // Tab and Shift-Tab are left to the editor, where they type; the menu
+            // takes the bracket keys that Xcode and the other Mac editors use.
+            add(menu, "Indent", #selector(MainWindowController.indentLinesAction(_:)), "]")
+            add(menu, "Unindent", #selector(MainWindowController.unindentLinesAction(_:)), "[")
 
             menu.addItem(submenu("Convert Case To") { sub in
                 add(sub, "UPPERCASE", #selector(MainWindowController.convertUpperCaseAction(_:)), "u", [.command, .shift])

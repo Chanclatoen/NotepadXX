@@ -19,6 +19,10 @@ public final class EditorViewController: NSViewController {
 
     /// Called whenever the buffer changes, so the document and status bar update.
     public var onTextChange: ((String) -> Void)?
+    /// Same moment as `onTextChange`, but without handing over the text: reading
+    /// `textView.string` copies the whole buffer, which a 100 MB document cannot
+    /// afford on every keystroke. The owner pulls `text` when it needs it.
+    public var onEdit: (() -> Void)?
     /// Called when the caret or selection moves.
     public var onSelectionChange: ((NSRange) -> Void)?
 
@@ -653,6 +657,10 @@ public final class EditorViewController: NSViewController {
 
     public var text: String { textView.string }
 
+    /// The buffer as an `NSString` without copying it, for counting and
+    /// searching on every caret move. Valid only until the next edit.
+    public var contents: NSString { textView.textStorage.mutableString }
+
     public var selectedRange: NSRange {
         get { textView.selectionManager.textSelections.first?.range ?? NSRange(location: 0, length: 0) }
         set { textView.selectionManager.setSelectedRange(newValue) }
@@ -964,13 +972,19 @@ public final class EditorViewController: NSViewController {
         return index
     }
 
+    private func notifyTextChanged() {
+        onEdit?()
+        // Only materialised for an owner that asked for the text itself.
+        if let onTextChange { onTextChange(textView.string) }
+    }
+
     /// Replaces the whole buffer, preserving the caret position where possible.
     public func replaceAll(with newText: String) {
         let caret = selectedRange.location
         textView.setText(newText)
         let clamped = min(caret, (newText as NSString).length)
         selectedRange = NSRange(location: clamped, length: 0)
-        onTextChange?(newText)
+        notifyTextChanged()
     }
 
     /// Replaces just the selected range.
@@ -984,7 +998,7 @@ public final class EditorViewController: NSViewController {
         textView.replaceCharacters(in: selection, with: replacement)
         let end = selection.location + (replacement as NSString).length
         selectedRange = NSRange(location: min(end, (textView.string as NSString).length), length: 0)
-        onTextChange?(textView.string)
+        notifyTextChanged()
     }
 
     /// Replaces the selection and keeps it selected, for transforms where the
@@ -994,7 +1008,7 @@ public final class EditorViewController: NSViewController {
         textView.replaceCharacters(in: selection, with: replacement)
         selectedRange = NSRange(location: selection.location,
                                 length: (replacement as NSString).length)
-        onTextChange?(textView.string)
+        notifyTextChanged()
     }
 
     /// How many lines the document has, for anything that has to report or
@@ -1096,7 +1110,7 @@ extension EditorViewController: @preconcurrency TextViewDelegate {
         applyAutoCloseIfNeeded(inserted: string)
         if !string.isEmpty { onTextInserted?(string) }
         updateCompletions(afterInserting: string)
-        onTextChange?(textView.string)
+        notifyTextChanged()
     }
 
     /// Scrolls so the configured number of lines stays visible around the

@@ -96,11 +96,11 @@ final class DockLayoutPersistenceTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        UserDefaults.standard.removeObject(forKey: key)
+        AppDefaults.store.removeObject(forKey: key)
     }
 
     override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: key)
+        AppDefaults.store.removeObject(forKey: key)
         super.tearDown()
     }
 
@@ -180,11 +180,11 @@ final class PerWorkspaceDockTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        keys.forEach { UserDefaults.standard.removeObject(forKey: $0) }
+        keys.forEach { AppDefaults.store.removeObject(forKey: $0) }
     }
 
     override func tearDown() {
-        keys.forEach { UserDefaults.standard.removeObject(forKey: $0) }
+        keys.forEach { AppDefaults.store.removeObject(forKey: $0) }
         super.tearDown()
     }
 

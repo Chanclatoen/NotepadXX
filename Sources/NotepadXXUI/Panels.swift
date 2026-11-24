@@ -299,7 +299,8 @@ public final class ClipboardHistoryPanel: NSObject, DockablePanel {
 
     private func startPolling() {
         timer = Timer.scheduledTimer(withTimeInterval: 0.75, repeats: true) { [weak self] _ in
-            self?.capturePasteboardIfChanged()
+            // A scheduled timer fires on the main run loop; the closure type is just not marked.
+            MainActor.assumeIsolated { self?.capturePasteboardIfChanged() }
         }
     }
 

@@ -144,7 +144,7 @@ public final class SearchPanelController: NSWindowController {
         // Clicking a field focuses it, but showing the panel does not pull focus
         // out of the document, so live highlighting keeps running.
         panel.becomesKeyOnlyIfNeeded = true
-        panel.setFrameAutosaveName("NotepadXX.SearchPanel")
+        if !AppDefaults.isIsolated { panel.setFrameAutosaveName("NotepadXX.SearchPanel") }
         super.init(window: panel)
         buildLayout()
         applyMode()

@@ -128,7 +128,7 @@ final class PluginRegistryTests: XCTestCase {
     func testIdentifierWithTraversalIsSanitised() throws {
         let (registry, dir) = try makeRegistry()
         let source = try makePluginSource(identifier: "../../escape", script: "exports.run=function(){};")
-        try? registry.install(from: source)
+        _ = try? registry.install(from: source)
 
         let pluginsPath = dir.appendingPathComponent("plugins").path
         let contents = try FileManager.default.contentsOfDirectory(atPath: pluginsPath)

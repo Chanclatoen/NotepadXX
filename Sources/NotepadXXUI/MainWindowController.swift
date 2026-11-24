@@ -37,6 +37,10 @@ public final class MainWindowController: NSWindowController {
     var progressiveLoads: [UUID: [Int]] = [:]
     /// Files being read right now, so opening one twice does not read it twice.
     var openingURLs: [URL: OpenProgressView] = [:]
+    /// Documents with a background save running, and those saved again meanwhile.
+    var savesInFlight: Set<UUID> = []
+    var resaveQueued: Set<UUID> = []
+    var onSavesDrained: (() -> Void)?
     private var untitledCounter = 0
     /// Indentation width used by tab/space conversion commands.
     public var tabWidth: Int = 4
@@ -138,7 +142,8 @@ public final class MainWindowController: NSWindowController {
             backing: .buffered, defer: false
         )
         window.title = "NotepadXX"
-        window.setFrameAutosaveName("NotepadXXMainWindow")
+        // AppKit writes autosaved frames to the real defaults, so isolated runs skip it.
+        if !AppDefaults.isIsolated { window.setFrameAutosaveName("NotepadXXMainWindow") }
         super.init(window: window)
         buildLayout()
         installMultiCaretMouseMonitor()
@@ -342,14 +347,15 @@ public final class MainWindowController: NSWindowController {
         } else {
             controller.load(text: document.text)
         }
-        controller.onTextChange = { [weak self, weak document, weak controller] text in
-            guard let document else { return }
-            document.text = text
+        controller.onEdit = { [weak self, weak document, weak controller] in
+            guard let self, let document, let controller else { return }
+            // The document pulls the text from the editor when something reads it.
+            document.noteEdited { [weak controller] in controller?.text ?? "" }
             // A clone in the other pane shows the same document, so it has to
-            // show the same text.
-            self?.syncClones(of: document, from: controller, text: text)
-            self?.refreshTabs()
-            self?.refreshStatus()
+            // show the same text. Only read when there is a clone to update.
+            self.syncClones(of: document, from: controller)
+            self.refreshTabs()
+            self.refreshStatus()
         }
         controller.onSelectionChange = { [weak self] _ in self?.refreshStatus() }
         // Typing is recorded while a macro is being captured. Without this the
@@ -393,11 +399,12 @@ public final class MainWindowController: NSWindowController {
     }
 
     /// Pushes an edit to the same document's editor in the other pane.
-    private func syncClones(of document: TextDocument,
-                            from source: EditorViewController?, text: String) {
+    private func syncClones(of document: TextDocument, from source: EditorViewController?) {
         for pane in 0...1 {
             let key = EditorKey(document: document.id, pane: pane)
-            guard let sibling = editors[key], sibling !== source, sibling.text != text else { continue }
+            guard let sibling = editors[key], sibling !== source else { continue }
+            let text = source?.text ?? document.text
+            guard sibling.text != text else { continue }
             // Keep the clone's caret where it was; only the text is shared.
             let caret = sibling.selectedRange
             sibling.replaceAll(with: text)
@@ -592,7 +599,7 @@ public final class MainWindowController: NSWindowController {
         // With several carets the totals span every selection, not just the
         // first, or the status bar under-reports what a keystroke will affect.
         let ranges = controller.selectedRanges
-        let content = document.text as NSString
+        let content = controller.contents
         let totalSelected = ranges.reduce(0) { $0 + $1.length }
         // Counted in place rather than by copying the selection out: Select All
         // in a 100 MB document would otherwise allocate a second copy of it on
@@ -608,7 +615,7 @@ public final class MainWindowController: NSWindowController {
             // From the layout manager's line index, not by rescanning the text:
             // this runs on every keystroke and every caret movement, so a scan
             // of the whole document here makes a large file unusable to type in.
-            lines: document.text.isEmpty ? 1 : controller.lineCount,
+            lines: content.length == 0 ? 1 : controller.lineCount,
             caretLine: caret.line,
             caretColumn: caret.column,
             selectionCharacters: totalSelected,
@@ -790,16 +797,81 @@ public final class MainWindowController: NSWindowController {
         }
     }
 
-    @objc public func saveDocumentAction(_ sender: Any?) {
-        guard documents.indices.contains(activeIndex) else { return }
+    @objc public func saveDocumentAction(_ sender: Any?) { saveActiveDocument() }
+
+    /// Saves the active document; `completion` runs once it is on disk (or failed).
+    public func saveActiveDocument(completion: (@MainActor () -> Void)? = nil) {
+        guard documents.indices.contains(activeIndex) else { completion?(); return }
         let document = documents[activeIndex]
-        if document.isUntitled { saveDocumentAsAction(sender); return }
+        if document.isUntitled { saveDocumentAsAction(nil); completion?(); return }
         // A folded region is physically absent from the buffer, so restore
         // every fold before writing or the file would lose those lines.
         unfoldAll()
-        guard write(document) else { return }
-        currentEditor?.documentDidSave()
-        refreshTabs()
+        save(document) { [weak self] saved in
+            if saved { self?.refreshTabs() }
+            completion?()
+        }
+    }
+
+    /// Writes `document` to its own file. A large one is encoded and written
+    /// off the main thread; a small one is written at once, as before.
+    /// `completion` gets whether the file is now up to date.
+    func save(_ document: TextDocument, completion: @escaping @MainActor (Bool) -> Void) {
+        let large = (editors[EditorKey(document: document.id, pane: document.paneIndex)]
+            ?? editorControllers(for: document).first).map { $0.contents.length >= Self.backgroundSaveThreshold } ?? false
+        guard large else {
+            let saved = write(document)
+            if saved { markSaved(document) }
+            return completion(saved)
+        }
+        writeInBackground(document) { [weak self] saved in
+            if saved { self?.markSaved(document) }
+            completion(saved)
+        }
+    }
+
+    /// Gutter bookkeeping after a successful save. Not done while edits made
+    /// during a background write are still unsaved.
+    private func markSaved(_ document: TextDocument) {
+        guard !document.isDirty else { return }
+        for pane in 0...1 { editors[EditorKey(document: document.id, pane: pane)]?.documentDidSave() }
+    }
+
+    /// Files at or above this many characters are saved off the main thread.
+    public static var backgroundSaveThreshold = 5 * 1_048_576
+
+    private func writeInBackground(_ document: TextDocument, completion: @escaping @MainActor (Bool) -> Void) {
+        // One write per document at a time; a second request runs after the first.
+        if savesInFlight.contains(document.id) {
+            resaveQueued.insert(document.id)
+            return completion(true)
+        }
+        let snapshot: TextDocument.SaveSnapshot
+        do { snapshot = try document.makeSaveSnapshot() } catch {
+            reportSaveFailure(document, error)
+            return completion(false)
+        }
+        savesInFlight.insert(document.id)
+        DispatchQueue.global(qos: .userInitiated).async {
+            let outcome = Result { try TextDocument.SaveSnapshot.write(snapshot) }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self.savesInFlight.remove(document.id)
+                    switch outcome {
+                    case .success:
+                        document.finishSave(snapshot)
+                        completion(true)
+                    case .failure(let error):
+                        self.reportSaveFailure(document, error)
+                        completion(false)
+                    }
+                    if self.resaveQueued.remove(document.id) != nil, document.isDirty {
+                        self.writeInBackground(document) { _ in self.refreshTabs() }
+                    }
+                    if self.savesInFlight.isEmpty { self.onSavesDrained?() }
+                }
+            }
+        }
     }
 
     /// Writes a document, telling the user if it did not work.
@@ -814,13 +886,17 @@ public final class MainWindowController: NSWindowController {
             try document.save(to: url)
             return true
         } catch {
-            let failure = error as? TextDocument.SaveError
-            presentError("The document “\(document.displayName)” could not be saved.",
-                         detail: [failure?.errorDescription ?? error.localizedDescription,
-                                  failure?.recoverySuggestion]
-                            .compactMap { $0 }.joined(separator: " "))
+            reportSaveFailure(document, error)
             return false
         }
+    }
+
+    private func reportSaveFailure(_ document: TextDocument, _ error: Error) {
+        let failure = error as? TextDocument.SaveError
+        presentError("The document “\(document.displayName)” could not be saved.",
+                     detail: [failure?.errorDescription ?? error.localizedDescription,
+                              failure?.recoverySuggestion]
+                        .compactMap { $0 }.joined(separator: " "))
     }
 
     @objc public func saveDocumentAsAction(_ sender: Any?) {
@@ -838,10 +914,7 @@ public final class MainWindowController: NSWindowController {
         for document in documents where !document.isUntitled && document.isDirty {
             // One unwritable file must not stop the rest from being saved, but
             // it must still be reported rather than passed over in silence.
-            guard write(document) else { continue }
-            for pane in 0...1 {
-                editors[EditorKey(document: document.id, pane: pane)]?.documentDidSave()
-            }
+            save(document) { [weak self] _ in self?.refreshTabs() }
         }
         refreshTabs()
     }

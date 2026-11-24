@@ -2,6 +2,7 @@ import AppKit
 import NotepadXXCore
 import NotepadXXDesign
 
+@MainActor
 public final class AppDelegate: NSObject, NSApplicationDelegate {
     public override init() { super.init() }
 
@@ -116,10 +117,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // Sandbox checks: edit and save the restored file, or change it behind
         // the app's back and run the external-change check.
         if options.screenshotPath != nil, ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "edit-save" {
-            let length = (windowController.currentEditor?.text as NSString?)?.length ?? 0
-            windowController.currentEditor?.selectedRange = NSRange(location: length, length: 0)
-            windowController.currentEditor?.replaceSelection(with: "\nsaved from the sandbox\n")
-            windowController.saveDocumentAction(nil)
+            // A large file is still arriving when launch ends; edit it once it is in.
+            afterOpens { [self] in
+                let length = (windowController.currentEditor?.text as NSString?)?.length ?? 0
+                windowController.currentEditor?.selectedRange = NSRange(location: length, length: 0)
+                windowController.currentEditor?.replaceSelection(with: "\nsaved from the sandbox\n")
+                windowController.saveDocumentAction(nil)
+            }
         }
         if options.screenshotPath != nil, ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "external-change",
            let url = windowController.activeDocument?.fileURL {
@@ -129,6 +133,24 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             // Silent reload, because a prompt is a sheet and the capture does not include sheets.
             try? windowController.preferencesStore?.update { $0.reloadChangedFilesSilently = true }
             windowController.checkForExternalChanges()
+        }
+        // New-command checks: the menus as a window the capture can see (a
+        // real open menu is not part of a window capture), and each command's effect.
+        if options.screenshotPath != nil, let demo = ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] {
+            switch demo {
+            case "menu-file": MenuPreviewWindow.show(menu: "File")
+            case "menu-edit": MenuPreviewWindow.show(menu: "Edit")
+            case "line-comment": windowController.currentEditor?.selectedRange = NSRange(location: 0, length: 60)
+                windowController.toggleLineCommentAction(nil)
+            case "block-comment": windowController.currentEditor?.selectedRange = NSRange(location: 0, length: 40)
+                windowController.toggleBlockCommentAction(nil)
+            case "indent": windowController.currentEditor?.selectedRange = NSRange(location: 0, length: 60)
+                windowController.indentLinesAction(nil)
+            case "split-lines": windowController.currentEditor?.selectedRange = NSRange(location: 0, length: 0)
+                try? windowController.preferencesStore?.update { $0.edgeColumn = 40 }
+                windowController.splitLinesAction(nil)
+            default: break
+            }
         }
         if ProcessInfo.processInfo.environment["NOTEPADXX_DEMO"] == "carets" {
             windowController.currentEditor?.selectedRange = NSRange(location: 0, length: 0)
@@ -236,9 +258,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let store = windowController.preferencesStore?.preferences
         if store?.periodicBackup ?? true {
             let interval = TimeInterval(max(1, store?.backupIntervalSeconds ?? 5))
-            autosaveTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-                self?.persistSession()
-            }
+            autosaveTimer = Timer.scheduledTimer(
+                timeInterval: interval, target: self, selector: #selector(autosaveTick), userInfo: nil, repeats: true)
+        }
+    }
+
+    /// Runs `body` once no file is still being opened.
+    @MainActor private func afterOpens(attempts: Int = 600, _ body: @escaping @MainActor () -> Void) {
+        if windowController.openingURLs.isEmpty || attempts == 0 { return body() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.afterOpens(attempts: attempts - 1, body)
         }
     }
 
@@ -272,6 +301,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.terminate(nil)
     }
 
+    /// A background save that is still writing finishes before the app quits.
+    public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let controller = windowController, !controller.savesInFlight.isEmpty else { return .terminateNow }
+        controller.onSavesDrained = { NSApp.reply(toApplicationShouldTerminate: true) }
+        return .terminateLater
+    }
+
     public func applicationWillTerminate(_ notification: Notification) {
         persistSession()
         if let probe = SessionStore.directoryOverride { try? FileManager.default.removeItem(at: probe) }
@@ -293,6 +329,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Never prompt to save. Unsaved buffers are snapshotted and restored — this
     /// is the Notepad++ scratchpad contract.
     public func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    @objc private func autosaveTick() { persistSession() }
 
     private func persistSession() {
         guard let store = sessionStore, let controller = windowController else { return }

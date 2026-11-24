@@ -7,14 +7,14 @@ import AppKit
 /// presses Command-S, sees nothing happen, and closes the file.
 @MainActor
 final class SaveFailureTests: XCTestCase {
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         MainWindowController.presentsAlerts = false
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         MainWindowController.presentsAlerts = true
-        super.tearDown()
+        try await super.tearDown()
     }
 
     private func controller(with document: TextDocument) -> MainWindowController {

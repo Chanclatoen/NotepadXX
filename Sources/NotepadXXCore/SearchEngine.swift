@@ -63,7 +63,7 @@ public struct SearchEngine: Sendable {
     /// Decodes the escapes Notepad++ accepts in Extended mode.
     public static func decodeExtended(_ input: String) -> String {
         var result = ""
-        var iterator = Array(input)
+        let iterator = Array(input)
         var index = 0
         while index < iterator.count {
             guard iterator[index] == "\\", index + 1 < iterator.count else {

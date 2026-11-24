@@ -156,11 +156,11 @@ public enum Benchmark {
                     view.textView.layoutManager.layoutLines()
                     done()
                 }, then: {
-                    // Save as the Save command does: the editor text is already in
-                    // the document, so this is unfold, normalise, encode and write.
+                    // Save as the Save command does: unfold, pull the editor text,
+                    // then normalise, encode and write (off the main thread for a
+                    // large file). The step ends when the file is on disk.
                     measure("save", { done in
-                        controller.saveDocumentAction(nil)
-                        done()
+                        controller.saveActiveDocument(completion: done)
                     }, then: finish)
                 })
             })

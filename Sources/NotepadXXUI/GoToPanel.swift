@@ -1,4 +1,5 @@
 import AppKit
+import NotepadXXCore
 import NotepadXXDesign
 
 /// Go to line or offset.
@@ -28,7 +29,7 @@ public final class GoToPanelController: NSWindowController {
         panel.title = "Go to…"
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
-        panel.setFrameAutosaveName("NotepadXX.GoToPanel")
+        if !AppDefaults.isIsolated { panel.setFrameAutosaveName("NotepadXX.GoToPanel") }
         super.init(window: panel)
         buildLayout()
     }
