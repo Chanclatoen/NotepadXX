@@ -187,21 +187,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // --screenshot <path> renders the window and exits, for CI and for
         // verifying the UI where screen capture is unavailable.
         if let path = options.screenshotPath {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                // Set last: the theme applies a window appearance of its own,
-                // so an override made earlier would be overwritten.
-                if let appearance = ProcessInfo.processInfo.environment["NOTEPADXX_APPEARANCE"] {
-                    let named: NSAppearance.Name = appearance == "dark" ? .darkAqua : .aqua
-                    NSApp.appearance = NSAppearance(named: named)
-                    for window in NSApp.windows { window.appearance = NSAppearance(named: named) }
+            // NOTEPADXX_SCREENSHOT_DELAY photographs at an exact moment (the
+            // progress bar of a large open); without it the shot waits for any
+            // file still opening, so it shows the finished window.
+            let delay = ProcessInfo.processInfo.environment["NOTEPADXX_SCREENSHOT_DELAY"].flatMap(Double.init)
+            DispatchQueue.main.asyncAfter(deadline: .now() + (delay ?? 1.5)) {
+                if delay == nil, !self.windowController.openingURLs.isEmpty {
+                    self.waitForOpensThenCapture(path)
+                    return
                 }
-                let title = ProcessInfo.processInfo.environment["NOTEPADXX_CAPTURE_WINDOW"]
-                if let title, WindowCapture.writePNG(ofWindowTitled: title, to: path) {
-                    // captured the named auxiliary window
-                } else if let window = self.windowController.window {
-                    WindowCapture.writePNG(of: window, to: path)
-                }
-                NSApp.terminate(nil)
+                self.capture(path)
             }
             return
         }
@@ -216,6 +211,36 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.persistSession()
             }
         }
+    }
+
+    /// Checks every 0.1 s, for up to a minute, whether the large files being
+    /// opened have finished, then photographs the window.
+    private func waitForOpensThenCapture(_ path: String, attempts: Int = 600) {
+        if windowController.openingURLs.isEmpty || attempts == 0 {
+            // One more turn so the last slice is laid out before the capture.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.capture(path) }
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.waitForOpensThenCapture(path, attempts: attempts - 1)
+        }
+    }
+
+    private func capture(_ path: String) {
+        // Set last: the theme applies a window appearance of its own,
+        // so an override made earlier would be overwritten.
+        if let appearance = ProcessInfo.processInfo.environment["NOTEPADXX_APPEARANCE"] {
+            let named: NSAppearance.Name = appearance == "dark" ? .darkAqua : .aqua
+            NSApp.appearance = NSAppearance(named: named)
+            for window in NSApp.windows { window.appearance = NSAppearance(named: named) }
+        }
+        let title = ProcessInfo.processInfo.environment["NOTEPADXX_CAPTURE_WINDOW"]
+        if let title, WindowCapture.writePNG(ofWindowTitled: title, to: path) {
+            // captured the named auxiliary window
+        } else if let window = windowController.window {
+            WindowCapture.writePNG(of: window, to: path)
+        }
+        NSApp.terminate(nil)
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
