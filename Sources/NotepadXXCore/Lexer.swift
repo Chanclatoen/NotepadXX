@@ -72,7 +72,14 @@ public struct Lexer {
             return String(scalars[position..<(position + token.count)]) == token
         }
 
+        // Progress guard: every pass must advance `index`. A branch that
+        // consumes nothing would otherwise spin forever on the main thread.
+        var lastIndex = -1
+
         while index < scalars.count {
+            if index <= lastIndex { index = lastIndex + 1; continue }
+            lastIndex = index
+
             // Continue an open block comment first — it swallows everything else.
             if state.blockCommentDepth > 0, let close = language.blockCommentClose {
                 let start = index
@@ -154,17 +161,27 @@ public struct Lexer {
                     continue
                 }
                 let start = index
+                index += 1
                 while index < scalars.count && isNumberCharacter(scalars[index]) { index += 1 }
                 emit(.number, start, index)
                 continue
             }
 
             // Word: keyword or identifier.
-            if isIdentifierStart(character) {
+            if isIdentifierStart(character), character != "@" || !(index > 0 && isIdentifierCharacter(scalars[index - 1])) {
                 let start = index
+                // The start character is consumed unconditionally: "@" starts a
+                // word but is not an identifier character, so the loop alone
+                // would make no progress.
+                index += 1
                 while index < scalars.count && isIdentifierCharacter(scalars[index]) { index += 1 }
                 let word = String(scalars[start..<index])
-                if let matched = group(for: word) { emit(matched, start, index) }
+                if let matched = group(for: word) {
+                    emit(matched, start, index)
+                } else if character == "@" && index - start > 1 {
+                    // Decorator / annotation / at-rule / attribute: @name.
+                    emit(.preprocessor, start, index)
+                }
                 continue
             }
 
